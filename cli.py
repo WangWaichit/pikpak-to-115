@@ -73,78 +73,98 @@ def ask(prompt: str, default: str = "", required: bool = False) -> str:
         print("  ! 这一项必填")
 
 
-def setup_wizard(cfg: dict) -> dict:
-    print("\n===== 配置 =====")
-    print("(任意步骤输入 b / back 返回上一步，q 取消)\n")
-
-    # ---- 115 ----
-    while True:
-        print("--- 115 网盘凭证 ---")
-        print("  1. Cookies (UID=..;CID=..;SEID=..;KID=..)")
-        print("  2. Refresh Token (OAuth 回调: https://api.oplist.org.cn/115cloud/callback)")
-        v = ask("选择 [1/2]  [q 取消]", default=cfg.get("pan115_mode", "1")).strip().lower()
-        if v in ("q", "quit"):
-            print("  已取消。")
+def config_115(cfg: dict) -> dict:
+    """单独配置 115 凭证。"""
+    print("\n--- 115 网盘凭证 ---")
+    print("  1. Cookies (UID=..;CID=..;SEID=..;KID=..)")
+    print("  2. Refresh Token (OAuth 回调: https://api.oplist.org.cn/115cloud/callback)")
+    v = ask("选择 [1/2]  [q 取消]", default=cfg.get("pan115_mode", "1")).strip().lower()
+    if v in ("q", "quit"):
+        print("  已取消。")
+        return cfg
+    if v not in ("1", "2"):
+        print("  ? 请输入 1 或 2")
+        return cfg
+    cfg["pan115_mode"] = v
+    if v == "1":
+        c = ask("115 cookies (UID=..;CID=..;SEID=..;KID=..)  [b 返回]",
+                default=cfg.get("pan115_cookies", ""), required=True)
+        if c.strip().lower() in ("b", "back"):
             return cfg
-        if v not in ("1", "2"):
-            print("  ? 请输入 1 或 2")
-            continue
-        cfg["pan115_mode"] = v
-        if v == "1":
-            c = ask("115 cookies (UID=..;CID=..;SEID=..;KID=..)  [b 返回]",
-                    default=cfg.get("pan115_cookies", ""), required=True)
-            if c.strip().lower() in ("b", "back"):
-                continue
-            cfg["pan115_cookies"] = c
-            cfg["pan115_refresh"] = ""
-        else:
-            c = ask("115 refresh_token  [b 返回]",
-                    default=cfg.get("pan115_refresh", ""), required=True)
-            if c.strip().lower() in ("b", "back"):
-                continue
-            cfg["pan115_refresh"] = c
-            cfg["pan115_cookies"] = ""
-            app_id = ask("115 开放平台 app_id (OpenList 默认 0 即可)",
-                         default=str(cfg.get("pan115_app_id", 0) or "0"))
-            cfg["pan115_app_id"] = int(app_id or 0)
-        break  # 115 完成，进入 PikPak
-
-    # ---- PikPak ----
-    while True:
-        print("\n--- PikPak 凭证 ---")
-        print("  1. 长期 Long-term Access Token (eyJ...，推荐)")
-        print("  2. OAuth refresh_token")
-        v = ask("选择 [1/2]  [b 返回 115 / q 取消]",
-                default=cfg.get("pikpak_mode", "1")).strip().lower()
-        if v in ("q", "quit"):
-            print("  已取消。")
+        cfg["pan115_cookies"] = c
+        cfg["pan115_refresh"] = ""
+    else:
+        c = ask("115 refresh_token  [b 返回]",
+                default=cfg.get("pan115_refresh", ""), required=True)
+        if c.strip().lower() in ("b", "back"):
             return cfg
-        if v in ("b", "back"):
-            continue  # 回到 115 模式选择（外层 while True 已结束，这里单独处理）
-            # 实际上这里直接重跑 115 流程即可
-        if v not in ("1", "2"):
-            print("  ? 请输入 1 或 2")
-            continue
-        cfg["pikpak_mode"] = v
-        if v == "1":
-            c = ask("PikPak 长期 Access Token (eyJ...)  [b 返回]",
-                    default=cfg.get("pikpak_token", ""), required=True)
-            if c.strip().lower() in ("b", "back"):
-                continue
-            cfg["pikpak_token"] = c
-            cfg["pikpak_refresh"] = ""
-        else:
-            c = ask("PikPak refresh_token  [b 返回]",
-                    default=cfg.get("pikpak_refresh", ""), required=True)
-            if c.strip().lower() in ("b", "back"):
-                continue
-            cfg["pikpak_refresh"] = c
-            cfg["pikpak_token"] = ""
-        break
-
+        cfg["pan115_refresh"] = c
+        cfg["pan115_cookies"] = ""
+        app_id = ask("115 开放平台 app_id (OpenList 默认 0 即可)",
+                     default=str(cfg.get("pan115_app_id", 0) or "0"))
+        cfg["pan115_app_id"] = int(app_id or 0)
     save_config(cfg)
-    print(f"配置已保存到 {CONFIG_PATH}\n")
+    print(f"  ✅ 115 配置已保存到 {CONFIG_PATH}\n")
     return cfg
+
+
+def config_pikpak(cfg: dict) -> dict:
+    """单独配置 PikPak 凭证。"""
+    print("\n--- PikPak 凭证 ---")
+    print("  1. 长期 Long-term Access Token (eyJ...，推荐)")
+    print("  2. OAuth refresh_token")
+    v = ask("选择 [1/2]  [q 取消]",
+            default=cfg.get("pikpak_mode", "1")).strip().lower()
+    if v in ("q", "quit"):
+        print("  已取消。")
+        return cfg
+    if v not in ("1", "2"):
+        print("  ? 请输入 1 或 2")
+        return cfg
+    cfg["pikpak_mode"] = v
+    if v == "1":
+        c = ask("PikPak 长期 Access Token (eyJ...)  [b 返回]",
+                default=cfg.get("pikpak_token", ""), required=True)
+        if c.strip().lower() in ("b", "back"):
+            return cfg
+        cfg["pikpak_token"] = c
+        cfg["pikpak_refresh"] = ""
+    else:
+        c = ask("PikPak refresh_token  [b 返回]",
+                default=cfg.get("pikpak_refresh", ""), required=True)
+        if c.strip().lower() in ("b", "back"):
+            return cfg
+        cfg["pikpak_refresh"] = c
+        cfg["pikpak_token"] = ""
+    save_config(cfg)
+    print(f"  ✅ PikPak 配置已保存到 {CONFIG_PATH}\n")
+    return cfg
+
+
+def setup_wizard(cfg: dict) -> dict:
+    """首次启动时一次性配置两边。"""
+    print("\n===== 首次配置 =====")
+    cfg = config_115(cfg)
+    cfg = config_pikpak(cfg)
+    return cfg
+
+
+def menu_reconfig(cfg: dict) -> dict:
+    """菜单 7：二级选择，单独改 115 或 PikPak。"""
+    while True:
+        print("\n===== 重新配置 =====")
+        print("  1. 仅配置 115 网盘凭证")
+        print("  2. 仅配置 PikPak 凭证")
+        print("  b. 返回主菜单")
+        v = ask("请选择 [1/2/b]").strip().lower()
+        if v in ("b", "back", ""):
+            return cfg
+        if v == "1":
+            cfg = config_115(cfg)
+        elif v == "2":
+            cfg = config_pikpak(cfg)
+        else:
+            print("  ? 请输入 1 / 2 / b")
 
 
 # --------------------------------------------------------------------------- #
@@ -579,7 +599,7 @@ def main():
         elif choice == "6":
             show_progress()
         elif choice == "7":
-            cfg = setup_wizard(cfg)
+            cfg = menu_reconfig(cfg)
             try:
                 if cfg.get("pikpak_mode") == "2":
                     pk = PikPak(refresh_token=cfg.get("pikpak_refresh", ""),
