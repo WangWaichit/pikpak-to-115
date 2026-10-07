@@ -17,7 +17,7 @@ set -e
 REPO="https://github.com/WangWaichit/pikpak-to-115.git"
 DIR="pikpak-to-115"
 
-echo "===== PikPak <-> 115 一键安装 v2 ====="
+echo "===== PikPak <-> 115 一键安装 v3 ====="
 echo
 
 # ---- 0. 必须 root 或 sudo ----
@@ -54,6 +54,20 @@ detect_pkgmgr() {
 }
 PKG=$(detect_pkgmgr)
 echo "    包管理器: $PKG"
+
+# ---- 1.5 判断国内/国外，选镜像源 ----
+IS_CN=0
+PIP_INDEX=""
+echo "[*] 检测网络位置（国内/国外）..."
+COUNTRY=$(curl -s --max-time 5 http://ip-api.com/json?fields=countryCode 2>/dev/null \
+    | grep -o '"countryCode":"[A-Z]*"' | cut -d'"' -f4 || true)
+if [ "$COUNTRY" = "CN" ]; then
+    IS_CN=1
+    PIP_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
+    echo "    位置: 国内 → 使用清华镜像"
+else
+    echo "    位置: 国外/未知 ($COUNTRY) → 使用官方源"
+fi
 
 # ---- 2. 装系统依赖 ----
 install_pkgs() {
@@ -207,10 +221,11 @@ echo "    使用: $(python3 --version)"
 echo "[*] 检查 Python 依赖..."
 if ! python3 -c "import requests, p115client" 2>/dev/null; then
     echo "[*] pip 安装 requests p115client ..."
-    # 优先 --break-system-packages（新系统），失败回退到普通 pip
-    python3 -m pip install --break-system-packages requests p115client 2>/dev/null \
-        || python3 -m pip install --user requests p115client \
-        || python3 -m pip install requests p115client
+    PIP_ARGS=""
+    [ -n "$PIP_INDEX" ] && PIP_ARGS="-i $PIP_INDEX"
+    python3 -m pip install --break-system-packages $PIP_ARGS requests p115client 2>/dev/null \
+        || python3 -m pip install --user $PIP_ARGS requests p115client \
+        || python3 -m pip install $PIP_ARGS requests p115client
 else
     echo "[*] Python 依赖已就绪"
 fi
