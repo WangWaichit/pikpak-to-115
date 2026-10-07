@@ -17,7 +17,7 @@ set -e
 REPO="https://github.com/WangWaichit/pikpak-to-115.git"
 DIR="pikpak-to-115"
 
-echo "===== PikPak <-> 115 一键安装 ====="
+echo "===== PikPak <-> 115 一键安装 v2 ====="
 echo
 
 # ---- 0. 必须 root 或 sudo ----
@@ -157,16 +157,19 @@ fi
 
 # apt 系统：加 deadsnakes PPA 装 python3.12
 if [ "$NEED_PY" -eq 1 ] && [ "$PKG" = "apt" ]; then
-    if ! command -v python3.12 >/dev/null 2>&1; then
+    if ! command -v python3.12 >/dev/null 2>&1 && [ ! -x /usr/bin/python3.12 ]; then
         echo "[*] 添加 deadsnakes PPA 并安装 python3.12 ..."
         $SUDO add-apt-repository -y ppa:deadsnakes/ppa
         $SUDO apt-get update -y
-        # 只装 python3.12 本体；-venv/-dev 找不到就跳过（本程序不需要）
-        $SUDO apt-get install -y python3.12 \
-            || { echo "[!] python3.12 安装失败"; exit 1; }
-        $SUDO apt-get install -y python3.12-venv python3.12-dev 2>/dev/null \
-            && echo "    python3.12-venv/dev 已装" \
-            || echo "    python3.12-venv/dev 跳过（不影响使用）"
+        # 只装 python3.12 本体；不装 -venv/-dev（本程序不需要）
+        if ! $SUDO apt-get install -y python3.12; then
+            echo "[!] python3.12 安装失败。可能原因："
+            echo "    1) Ubuntu 版本太老（<20.04）deadsnakes 不支持"
+            echo "    2) 网络问题拉不到 PPA"
+            echo "    请把上面的 apt 报错发出来。"
+            exit 1
+        fi
+        hash -r
     fi
 fi
 
