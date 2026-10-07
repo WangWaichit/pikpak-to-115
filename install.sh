@@ -86,39 +86,39 @@ install_pkgs() {
 NEED=()
 command -v git     >/dev/null 2>&1 || NEED+=(git)
 command -v wget    >/dev/null 2>&1 || NEED+=(wget)
-command -v python3 >/dev/null 2>&1 || NEED+=(python3)
-command -v pip3    >/dev/null 2>&1 || NEED+=(python3-pip)
 
-# Python 版本检查
-PY_OK=0
-if command -v python3 >/dev/null 2>&1; then
-    PY_MAJOR=$(python3 -c 'import sys; print(sys.version_info[0])')
-    PY_MINOR=$(python3 -c 'import sys; print(sys.version_info[1])')
-    if [ "$PY_MAJOR" -gt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -ge 8 ]; }; then
-        PY_OK=1
-        echo "    Python: $(python3 --version)"
-    else
-        echo "    Python 版本太老: $(python3 --version)（需要 >= 3.8）"
-        PY_OK=0
-    fi
+# 检查 Python 3.12 是否可用（p115client 要求 >=3.12）
+NEED_PY=0
+if command -v python3.12 >/dev/null 2>&1; then
+    PY_BIN=python3.12
+elif python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>/dev/null; then
+    PY_BIN=python3
+else
+    PY_BIN=""
+    NEED_PY=1
 fi
 
-# 如果 Python 太老或没有，按系统装新版
-if [ "$PY_OK" -eq 0 ]; then
-    echo "[*] 需要安装 Python 3.8+"
+if [ -n "$PY_BIN" ]; then
+    echo "    Python: $($PY_BIN --version)"
+fi
+
+# 如果 Python 3.12 没有，按系统装
+if [ "$NEED_PY" -eq 1 ]; then
+    echo "[*] 需要安装 Python 3.12（p115client 要求 >=3.12）"
     case "$PKG" in
         apt)
-            # Ubuntu 20.04 自带 python3.8，新一点的版本自带更新的
-            NEED+=(python3 python3-pip python3-venv)
+            # Ubuntu/Debian: 用 deadsnakes PPA
+            NEED+=(software-properties-common)
             ;;
         dnf)
-            NEED+=(python3.9 python3.9-pip)
-            # CentOS/Rocky 8/9 用 python39
+            NEED+=(python3.12 python3.12-pip)
             ;;
         yum)
-            NEED+=(python39 python39-pip)
+            # CentOS 7/8: 先开 EPEL + SCL
+            NEED+=(python3.12 python3.12-pip)
             ;;
         apk)
+            # Alpine 3.20+ 自带 python3=3.11, 3.21+ 有 3.12
             NEED+=(python3 py3-pip)
             ;;
         pacman)
@@ -130,28 +130,51 @@ fi
 if [ ${#NEED[@]} -gt 0 ]; then
     echo "[*] 安装系统包: ${NEED[*]}"
     install_pkgs "${NEED[@]}"
-else
-    echo "[*] 系统依赖已就绪"
 fi
 
-# CentOS/Rocky 8/9 装完 python39 后，python3 可能还是指向 3.6，需要用 python39
-if ! python3 -c 'import sys; exit(0 if sys.version_info >= (3,8) else 1)' 2>/dev/null; then
-    if command -v python3.9 >/dev/null 2>&1; then
-        ln -sf "$(command -v python3.9)" /usr/local/bin/python3
-        ln -sf "$(command -v pip3.9 2>/dev/null || echo pip3.9)" /usr/local/bin/pip3 2>/dev/null || true
-        hash -r
-        echo "    已切换 python3 -> $(python3 --version)"
+# apt 系统：加 deadsnakes PPA 装 python3.12
+if [ "$NEED_PY" -eq 1 ] && [ "$PKG" = "apt" ]; then
+    if ! command -v python3.12 >/dev/null 2>&1; then
+        echo "[*] 添加 deadsnakes PPA 并安装 python3.12 ..."
+        $SUDO add-apt-repository -y ppa:deadsnakes/ppa
+        $SUDO apt-get update -y
+        $SUDO apt-get install -y python3.12 python3.12-venv python3.12-dev
     fi
 fi
+
+# 选定 Python 解释器
+if command -v python3.12 >/dev/null 2>&1; then
+    PY_BIN=python3.12
+elif python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>/dev/null; then
+    PY_BIN=python3
+else
+    echo "[!] 仍找不到 Python 3.12。请手动安装后重试。"
+    exit 1
+fi
+
+# 确保 pip 可用
+if ! $PY_BIN -m pip --version >/dev/null 2>&1; then
+    echo "[*] 给 $PY_BIN 装 pip ..."
+    $PY_BIN -m ensurepip --upgrade 2>/dev/null || \
+        $SUDO apt-get install -y python3-pip 2>/dev/null || true
+fi
+
+# 切 python3 -> python3.12（如果系统默认太老）
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>/dev/null; then
+    ln -sf "$(command -v $PY_BIN)" /usr/local/bin/python3
+    ln -sf "$(command -v $PY_BIN)-m pip" /usr/local/bin/pip3 2>/dev/null || true
+    hash -r
+fi
+echo "    使用: $(python3 --version)"
 
 # ---- 3. pip 装 Python 依赖 ----
 echo "[*] 检查 Python 依赖..."
 if ! python3 -c "import requests, p115client" 2>/dev/null; then
     echo "[*] pip 安装 requests p115client ..."
-    # 优先 --user --break-system-packages（新系统），失败回退到普通 pip
-    pip3 install --user --break-system-packages requests p115client 2>/dev/null \
-        || pip3 install --user requests p115client \
-        || pip3 install requests p115client
+    # 优先 --break-system-packages（新系统），失败回退到普通 pip
+    python3 -m pip install --break-system-packages requests p115client 2>/dev/null \
+        || python3 -m pip install --user requests p115client \
+        || python3 -m pip install requests p115client
 else
     echo "[*] Python 依赖已就绪"
 fi

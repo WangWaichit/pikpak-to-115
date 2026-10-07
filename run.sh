@@ -12,7 +12,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 PY=python3
-command -v $PY >/dev/null 2>&1 || { echo "[!] 未找到 python3: apt install -y python3 python3-pip"; exit 1; }
+command -v python3.12 >/dev/null 2>&1 && PY=python3.12
+command -v $PY >/dev/null 2>&1 || { echo "[!] 未找到 python3.12: 请重跑 install.sh"; exit 1; }
 
 PID_FILE="./.run.pid"
 LOG_FILE="./sync.log"
