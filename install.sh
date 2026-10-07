@@ -171,14 +171,19 @@ if [ "$NEED_PY" -eq 1 ] && [ "$PKG" = "apt" ]; then
 fi
 
 # 选定 Python 解释器
+hash -r
 if command -v python3.12 >/dev/null 2>&1; then
     PY_BIN=python3.12
+elif [ -x /usr/bin/python3.12 ]; then
+    PY_BIN=/usr/bin/python3.12
 elif python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>/dev/null; then
     PY_BIN=python3
 else
     echo "[!] 仍找不到 Python 3.12。请手动安装后重试。"
+    echo "    手动装: apt install -y python3.12"
     exit 1
 fi
+echo "    找到 Python: $($PY_BIN --version)  ($(command -v $PY_BIN 2>/dev/null || echo $PY_BIN))"
 
 # 确保 pip 可用
 if ! $PY_BIN -m pip --version >/dev/null 2>&1; then
