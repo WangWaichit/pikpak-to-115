@@ -153,8 +153,8 @@ fi
 echo "  python3 -> $(python3 --version)"
 
 # ---- pip 装依赖 ----
-echo "[*] 安装 requests p115client ..."
-python3 -m pip install --break-system-packages $PIP_INDEX requests p115client
+echo "[*] 安装 requests p115client (强制升级) ..."
+python3 -m pip install --break-system-packages $PIP_INDEX --upgrade requests "p115client>=0.0.9.7"
 
 # ---- clone 仓库 ----
 cd ~
