@@ -14,10 +14,15 @@
 #
 set -e
 
+# 跳过 apt 交互式弹窗（needrestart / 内核升级提示）
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
+
 REPO="https://github.com/WangWaichit/pikpak-to-115.git"
 DIR="pikpak-to-115"
 
-echo "===== PikPak <-> 115 一键安装 v3 ====="
+echo "===== PikPak <-> 115 一键安装 v3.2 ====="
 echo
 
 # ---- 0. 必须 root 或 sudo ----
@@ -202,11 +207,24 @@ else
 fi
 echo "    找到 Python: $($PY_BIN --version)  ($(command -v $PY_BIN 2>/dev/null || echo $PY_BIN))"
 
-# 确保 pip 可用
+# 确保 pip 可用（Python 3.12 移除了 distutils，系统 pip 会崩，必须用 get-pip.py 重装）
 if ! $PY_BIN -m pip --version >/dev/null 2>&1; then
-    echo "[*] 给 $PY_BIN 装 pip ..."
-    $PY_BIN -m ensurepip --upgrade 2>/dev/null || \
-        $SUDO apt-get install -y python3-pip 2>/dev/null || true
+    echo "[*] 给 $PY_BIN 重装 pip（get-pip.py，绕开 distutils 缺失）..."
+    GETPIP=/tmp/get-pip.py
+    if [ ! -f "$GETPIP" ]; then
+        wget --no-cache -q https://bootstrap.pypa.io/get-pip.py -O "$GETPIP" || \
+        curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$GETPIP"
+    fi
+    $SUDO $PY_BIN "$GETPIP" --break-system-packages 2>/dev/null \
+        || $PY_BIN "$GETPIP" --user 2>/dev/null \
+        || $PY_BIN "$GETPIP"
+    rm -f "$GETPIP"
+    hash -r
+    if ! $PY_BIN -m pip --version >/dev/null 2>&1; then
+        echo "[!] pip 安装失败。请手动跑: $PY_BIN /tmp/get-pip.py"
+        exit 1
+    fi
+    echo "    pip: $($PY_BIN -m pip --version)"
 fi
 
 # 切 python3 -> python3.12（如果系统默认太老）
