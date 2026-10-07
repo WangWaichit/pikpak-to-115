@@ -16,6 +16,28 @@ export DPKG_OPTIONS="--force-confdef --force-confold"
 REPO="https://github.com/WangWaichit/pikpak-to-115.git"
 DIR="pikpak-to-115"
 
+# ---- 等 apt 锁释放（新装 VPS 系统自动更新会锁 apt，最多等 5 分钟）----
+echo "[*] 检查 apt 锁..."
+for i in $(seq 1 60); do
+    if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+       && ! fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
+       && ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
+        break
+    fi
+    PID=$(fuser /var/lib/dpkg/lock-frontend 2>/dev/null | awk '{print $1}')
+    echo "  apt 被 PID=$PID 占用，等 5 秒... ($i/60)"
+    sleep 5
+done
+
+# 兜底：等完还锁，停掉 unattended-upgrades
+if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+    echo "[*] 等满 5 分钟还在跑，停掉 unattended-upgrades..."
+    systemctl stop unattended-upgrades 2>/dev/null || true
+    pkill -f apt-get 2>/dev/null || true
+    sleep 2
+    dpkg --configure -a 2>/dev/null || true
+fi
+
 echo "===== PikPak <-> 115 一键安装 v3.5 (零交互) ====="
 echo
 
