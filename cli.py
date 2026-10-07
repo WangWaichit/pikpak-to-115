@@ -280,16 +280,18 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
 
 MAIN_MENU = """
 ===== PikPak <-> 115 =====
-  1. 列出 115 目录
-  2. 列出 PikPak 目录
-  3. 拷贝 115 目录文件到 PikPak 目录
-  4. 拷贝 PikPak 目录文件到 115 目录
-  5. 查看复制进度
-  6. 重新配置文件
-  7. 测试 115 cookies 连通性
-  8. 测试 PikPak token 连通性
-  9. 测试网盘是否连接（双侧）
-  10. 退出
+  1. 安装/更新程序
+  2. 列出 115 目录
+  3. 列出 PikPak 目录
+  4. 拷贝 115 目录文件到 PikPak 目录
+  5. 拷贝 PikPak 目录文件到 115 目录
+  6. 查看复制进度
+  7. 重新配置文件
+  8. 测试 115 cookies 连通性
+  9. 测试 PikPak token 连通性
+  10. 测试网盘是否连接（双侧）
+  11. 卸载程序
+  12. 退出
 ==========================="""
 
 
@@ -396,24 +398,38 @@ def main():
     while True:
         print(MAIN_MENU)
         try:
-            choice = input("请选择 [1-10]: ").strip()
+            choice = input("请选择 [1-12]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nbye")
             break
 
         if choice == "1":
+            # 安装/更新程序
+            import subprocess
+            print("\n--- 拉取最新代码并重装依赖 ---")
+            try:
+                subprocess.run(["git", "pull", "--ff-only"], cwd=HERE, check=False)
+                subprocess.run([
+                    "python3", "-m", "pip", "install",
+                    "--break-system-packages", "-q", "requests", "p115client"
+                ], check=False)
+                print("  ✅ 已是最新。建议退出重进 ./run.sh 加载新代码。")
+            except Exception as e:  # noqa: BLE001
+                print(f"  ! 更新失败: {e}")
+            input("\n按回车继续...")
+        elif choice == "2":
             if pan is None:
-                print("  ! 115 未连接，请先选菜单 6 重新配置。")
+                print("  ! 115 未连接，请先选菜单 7 重新配置。")
                 continue
             browse_pan115(pan, cfg.get("last_115", "/"))
-        elif choice == "2":
+        elif choice == "3":
             if pk is None:
-                print("  ! PikPak 未连接，请先选菜单 6 重新配置。")
+                print("  ! PikPak 未连接，请先选菜单 7 重新配置。")
                 continue
             browse_pikpak(pk, cfg.get("last_pk", ""))
-        elif choice == "3":
+        elif choice == "4":
             if pan is None or pk is None:
-                print("  ! 115/PikPak 未连接，请先选菜单 6 重新配置。")
+                print("  ! 115/PikPak 未连接，请先选菜单 7 重新配置。")
                 continue
             if PROGRESS["running"]:
                 print("  ! 已有任务在跑，先看进度或等它结束。")
@@ -441,10 +457,10 @@ def main():
                                  args=("115->pikpak", pk, pan, src, final_dst),
                                  daemon=True)
             t.start()
-            print("  已在后台开始。回主菜单选 5 看进度。")
-        elif choice == "4":
+            print("  已在后台开始。回主菜单选 6 看进度。")
+        elif choice == "5":
             if pan is None or pk is None:
-                print("  ! 115/PikPak 未连接，请先选菜单 6 重新配置。")
+                print("  ! 115/PikPak 未连接，请先选菜单 7 重新配置。")
                 continue
             if PROGRESS["running"]:
                 print("  ! 已有任务在跑，先看进度或等它结束。")
@@ -472,12 +488,11 @@ def main():
                                  args=("pikpak->115", pk, pan, src, final_dst),
                                  daemon=True)
             t.start()
-            print("  已在后台开始。回主菜单选 5 看进度。")
-        elif choice == "5":
-            show_progress()
+            print("  已在后台开始。回主菜单选 6 看进度。")
         elif choice == "6":
+            show_progress()
+        elif choice == "7":
             cfg = setup_wizard(cfg)
-            # 重连（失败也不崩，留 None 提示用户）
             try:
                 pk = PikPak(access_token=cfg["pikpak_token"],
                             token_store=HERE / ".pikpak_token.json")
@@ -491,28 +506,60 @@ def main():
             except Exception as e:  # noqa: BLE001
                 pan = None
                 print(f"  115 重连失败: {e}")
-        elif choice == "7":
+        elif choice == "8":
             if pan is None:
                 print("  ! 115 未连接。")
             else:
                 test_pan115(pan)
             input("\n按回车继续...")
-        elif choice == "8":
+        elif choice == "9":
             if pk is None:
                 print("  ! PikPak 未连接。")
             else:
                 test_pikpak(pk)
             input("\n按回车继续...")
-        elif choice == "9":
+        elif choice == "10":
             if pan is None or pk is None:
-                print("  ! 至少有一侧未连接，先选菜单 6 重新配置。")
+                print("  ! 至少有一侧未连接，先选菜单 7 重新配置。")
             else:
                 test_both(pk, pan)
-        elif choice == "10":
+        elif choice == "11":
+            # 卸载
+            print("\n--- 卸载 ---")
+            print("将执行：")
+            print("  1. 停止并禁用 systemd 服务（如有）")
+            print("  2. 删除 /etc/systemd/system/pikpak-to-115.service")
+            print("  3. 删除 /usr/local/bin/pikpak 软链（如有）")
+            print("  4. 从 /root/.bashrc 删除 alias p（如有）")
+            print("  5. 保留项目目录（凭证和进度不删）")
+            ok = input("  确认卸载? 输入 YES 继续: ").strip()
+            if ok == "YES":
+                import shutil
+                subprocess.run(["systemctl", "stop", "pikpak-to-115"], check=False)
+                subprocess.run(["systemctl", "disable", "pikpak-to-115"], check=False)
+                for f in ["/etc/systemd/system/pikpak-to-115.service",
+                          "/usr/local/bin/pikpak"]:
+                    try:
+                        Path(f).unlink()
+                    except Exception:
+                        pass
+                # 清 .bashrc 里的 alias p
+                bashrc = Path("/root/.bashrc")
+                if bashrc.exists():
+                    lines = [l for l in bashrc.read_text().splitlines()
+                             if "alias p=" not in l or "pikpak-to-115" not in l]
+                    bashrc.write_text("\n".join(lines) + "\n")
+                subprocess.run(["systemctl", "daemon-reload"], check=False)
+                print("  ✅ 卸载完成。项目目录保留在:", HERE)
+                print("  如要彻底删除: rm -rf", HERE)
+            else:
+                print("  已取消。")
+            input("\n按回车继续...")
+        elif choice == "12":
             print("bye")
             break
         else:
-            print("  ? 请输入 1-10")
+            print("  ? 请输入 1-12")
 
 
 if __name__ == "__main__":
