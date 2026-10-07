@@ -584,7 +584,7 @@ class Pan115:
         from p115client.fs import P115FileSystem
         if refresh_token:
             # OAuth refresh_token 模式
-            client = P115Client.refresh_login(refresh_token)
+            client = P115Client(refresh_token=refresh_token)
         else:
             client = P115Client(cookies)
         self.fs = P115FileSystem(client)
