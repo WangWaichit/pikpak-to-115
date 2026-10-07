@@ -22,10 +22,13 @@ PikPak -> 115 网盘同步工具
 """
 
 import argparse
+import base64
 import hashlib
+import hmac
 import json
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -121,6 +124,91 @@ def _captcha_sign(device_id: str, ts_ms: str) -> str:
     for salt in PK_SALTS:
         s = hashlib.md5((s + salt).encode()).hexdigest()
     return f"1.{s}"
+
+
+# ---- PikPak GCID hash & OSS signing（用于上传） --------------------------- #
+
+def _gcid_chunk_size(size: int) -> int:
+    if size <= 0:
+        return 0x200000
+    if size < 0x8000000:
+        return 0x40000
+    if size < 0x10000000:
+        return 0x80000
+    if size > 0x20000000:
+        return 0x200000
+    return 0x100000
+
+
+def compute_gcid(path: Path, size: int, progress_cb=None) -> str:
+    """PikPak 内容 hash：分块 SHA1 再外层 SHA1，大写 hex。"""
+    if size <= 0:
+        return hashlib.sha1(b"").hexdigest().upper()
+    chunk = _gcid_chunk_size(size)
+    outer = hashlib.sha1()
+    done = 0
+    with open(path, "rb") as f:
+        while done < size:
+            buf = f.read(min(chunk, size - done))
+            if not buf:
+                break
+            outer.update(hashlib.sha1(buf).digest())
+            done += len(buf)
+            if progress_cb:
+                progress_cb(done, size)
+    return outer.hexdigest().upper()
+
+
+def _oss_sign(method, bucket, key_path, raw_query, content_type, date,
+              security_token, ak, sk):
+    """Aliyun OSS v1 HMAC-SHA1 签名。"""
+    canonical = f"{method}\n\n{content_type}\n{date}\nx-oss-security-token:{security_token}\n/{bucket}{key_path}"
+    if raw_query:
+        canonical += f"?{raw_query}"
+    sig = base64.b64encode(
+        hmac.new(sk.encode(), canonical.encode(), hashlib.sha1).digest()
+    ).decode()
+    return f"OSS {ak}:{sig}"
+
+
+def _oss_request(session, method, sess, raw_query, body=None):
+    import email.utils
+    date = email.utils.formatdate(usegmt=True)
+    ct = "application/octet-stream" if body else ""
+    auth = _oss_sign(method, sess["bucket"], "/" + sess["key"], raw_query,
+                     ct, date, sess["sts"], sess["ak"], sess["sk"])
+    url = f"https://{sess['endpoint']}/{sess['key']}?{raw_query}"
+    headers = {
+        "Date": date,
+        "x-oss-security-token": sess["sts"],
+        "Authorization": auth,
+    }
+    if ct:
+        headers["Content-Type"] = ct
+    r = session.request(method, url, data=body, headers=headers, timeout=120)
+    if not r.ok:
+        raise RuntimeError(f"OSS {method} ?{raw_query} -> {r.status_code}: {r.text[:300]}")
+    return r.content
+
+
+def _oss_put_part(session, sess, upload_id, part_num, body):
+    raw = f"partNumber={part_num}&uploadId={upload_id}"
+    import email.utils
+    date = email.utils.formatdate(usegmt=True)
+    ct = "application/octet-stream"
+    auth = _oss_sign("PUT", sess["bucket"], "/" + sess["key"], raw,
+                     ct, date, sess["sts"], sess["ak"], sess["sk"])
+    url = f"https://{sess['endpoint']}/{sess['key']}?{raw}"
+    headers = {
+        "Date": date,
+        "x-oss-security-token": sess["sts"],
+        "Authorization": auth,
+        "Content-Type": ct,
+    }
+    r = session.put(url, data=body, headers=headers, timeout=300)
+    if not r.ok:
+        raise RuntimeError(f"OSS PUT part {part_num} -> {r.status_code}: {r.text[:300]}")
+    return r.headers.get("ETag", '""')
 
 
 class PikPak:
@@ -319,6 +407,83 @@ class PikPak:
             raise RuntimeError(f"文件 {file_id} 没有下载链接")
         return url
 
+    # ---- 上传到 PikPak（115 -> PikPak 方向用） ---------------------------- #
+    def upload_file(self, local_path: Path, parent_id: str = "",
+                    filename: str = "", progress_cb=None) -> str:
+        """上传本地文件到 PikPak，返回 file_id。支持秒传 + OSS 分片。"""
+        filename = filename or local_path.name
+        size = local_path.stat().st_size
+        gcid = compute_gcid(local_path, size, progress_cb)
+        log.info("  GCID=%s size=%s", gcid, human_size(size))
+
+        # 1) 注册文件
+        body = {
+            "kind": "drive#file",
+            "name": filename,
+            "size": str(size),
+            "hash": gcid,
+            "upload_type": "UPLOAD_TYPE_RESUMABLE",
+            "body": {"duration": "", "width": "", "height": ""},
+            "objProvider": {"provider": "UPLOAD_TYPE_UNKNOWN"},
+        }
+        if parent_id:
+            body["parent_id"] = parent_id
+        j = self._request(
+            "POST", f"{PK_DRIVE_HOST}/drive/v1/files",
+            data=body, with_captcha_action="POST:/drive/v1/files",
+        )
+        file_obj = j.get("file") or {}
+        file_id = file_obj.get("id", "")
+        phase = file_obj.get("phase", "")
+        if phase == "PHASE_TYPE_COMPLETE":
+            log.info("  秒传命中，无需上传字节")
+            return file_id
+
+        # 2) 拿 OSS 凭证
+        resumable = (file_obj.get("resumable") or {}).get("params") or {}
+        if not resumable:
+            raise RuntimeError(f"上传响应缺少 resumable.params: {j}")
+        sess = {
+            "bucket": resumable.get("bucket", ""),
+            "endpoint": resumable.get("endpoint", ""),
+            "key": resumable.get("key", ""),
+            "ak": resumable.get("access_key_id", ""),
+            "sk": resumable.get("access_key_secret", ""),
+            "sts": resumable.get("security_token", ""),
+        }
+        # partSize: ceil(size/10000), 最小 256KB
+        part_size = max((size + 9999) // 10000, 0x40000)
+
+        # 3) OSS Initiate Multipart
+        xml = _oss_request(self.session, "POST", sess, raw_query="uploads")
+        m = re.search(rb"<UploadId>(.+?)</UploadId>", xml)
+        if not m:
+            raise RuntimeError(f"OSS initiate 失败: {xml[:300]}")
+        upload_id = m.group(1).decode()
+
+        # 4) 逐片 PUT
+        parts_count = (size + part_size - 1) // part_size
+        parts_etag = {}
+        with open(local_path, "rb") as f:
+            for i in range(1, parts_count + 1):
+                f.seek((i - 1) * part_size)
+                chunk = f.read(min(part_size, size - (i - 1) * part_size))
+                etag = _oss_put_part(self.session, sess, upload_id, i, chunk)
+                parts_etag[i] = etag.strip('"')
+                if progress_cb:
+                    progress_cb(i * part_size, size)
+
+        # 5) OSS Complete
+        body_xml = "<CompleteMultipartUpload>" + "".join(
+            f"<Part><PartNumber>{n}</PartNumber><ETag>{e}</ETag></Part>"
+            for n, e in sorted(parts_etag.items())
+        ) + "</CompleteMultipartUpload>"
+        _oss_request(self.session, "POST", sess,
+                     raw_query=f"uploadId={upload_id}",
+                     body=body_xml.encode())
+        log.info("  PikPak 上传完成: %s", filename)
+        return file_id
+
 
 # --------------------------------------------------------------------------- #
 # 下载（流式写盘）
@@ -416,6 +581,22 @@ class Pan115:
     def upload(self, local_path: Path, filename: str, cid: int):
         self.fs.upload(cid, file=str(local_path), filename=filename)
 
+    def download(self, file_id: int, dest: Path):
+        """从 115 下载文件到本地 dest。"""
+        self.fs.download(file_id, str(dest))
+
+    def list_files_in_dir(self, cid: int):
+        """返回 [(name, size, fid)]，文件（非目录）。"""
+        out = []
+        for child in self.fs.iterdir(cid):
+            if not child.get("is_dir"):
+                try:
+                    size = int(child.get("size", 0))
+                except Exception:
+                    size = 0
+                out.append((child.get("name", ""), size, int(child["id"])))
+        return out
+
 
 # --------------------------------------------------------------------------- #
 # 主流程
@@ -479,6 +660,94 @@ def sync_folder(pk: PikPak, pan: Pan115,
         sub_rel = f"{pk_rel_path}/{sub_name}".strip("/")
         sub_cid = pan._ensure_child_dir(pan_cid, sub_name)
         sync_folder(pk, pan, sub_pk_id, sub_cid, sub_rel, dry_run, tmp_dir)
+
+
+def sync_folder_reverse(pk: PikPak, pan: Pan115,
+                        pan_cid: int,
+                        pk_parent_id: str,
+                        pan_rel_path: str,
+                        dry_run: bool, tmp_dir: Path,
+                        progress=None):
+    """递归同步 115 目录到 PikPak。progress 为可选 dict，用于 CLI 显示进度。"""
+    items = list(pan.fs.iterdir(pan_cid))
+    folders = [x for x in items if x.get("is_dir")]
+    files = []
+    for x in items:
+        if x.get("is_dir"):
+            continue
+        try:
+            size = int(x.get("size", 0))
+        except Exception:
+            size = 0
+        files.append((x.get("name", ""), size, int(x["id"])))
+
+    log.info("=" * 70)
+    log.info("目录: 115:/%s  ->  PikPak:(%s)  子目录 %d 个, 文件 %d 个",
+             pan_rel_path or "/", pk_parent_id or "(根)", len(folders), len(files))
+
+    # 115 侧没有 PikPak 的名字，简单用 (name, size) 去重：
+    # PikPak 目标目录下已有的 (name, size) 跳过
+    existing = set()
+    if pk_parent_id:
+        try:
+            for c in pk.list_children(pk_parent_id):
+                if c.get("kind") == "drive#file":
+                    try:
+                        existing.add((c.get("name", ""), int(c.get("size", 0))))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    for name, size, fid in files:
+        if (name, size) in existing:
+            log.info("  [跳过] %s (%s) 已存在", name, human_size(size))
+            continue
+        log.info("  [传输] %s (%s)", name, human_size(size))
+        if dry_run:
+            continue
+        tmp_path = tmp_dir / f"115_{fid}.part"
+        try:
+            pan.download(fid, tmp_path)
+            actual = tmp_path.stat().st_size
+            if size > 0 and actual < size:
+                raise RuntimeError(f"下载不完整: {actual}/{size}")
+            pk.upload_file(tmp_path, parent_id=pk_parent_id, filename=name)
+            log.info("  [完成] %s", name)
+            tmp_path.unlink(missing_ok=True)
+        except Exception as e:  # noqa: BLE001
+            log.error("  [失败] %s: %s", name, e)
+            continue
+
+    for f in folders:
+        sub_name = f["name"]
+        sub_pk_id = ""
+        # 在 PikPak 目标目录下找同名子目录，没有就创建
+        try:
+            children = pk.list_children(pk_parent_id) if pk_parent_id else pk.list_children("")
+            for c in children:
+                if c.get("kind") == "drive#folder" and c.get("name") == sub_name:
+                    sub_pk_id = c["id"]
+                    break
+        except Exception:
+            pass
+        if not sub_pk_id:
+            # 创建 PikPak 目录
+            try:
+                body = {"kind": "drive#folder", "name": sub_name}
+                if pk_parent_id:
+                    body["parent_id"] = pk_parent_id
+                j = pk._request(
+                    "POST", f"{PK_DRIVE_HOST}/drive/v1/files",
+                    data=body, with_captcha_action="POST:/drive/v1/files",
+                )
+                sub_pk_id = (j.get("file") or {}).get("id", "")
+            except Exception as e:  # noqa: BLE001
+                log.error("  创建 PikPak 目录失败 %s: %s", sub_name, e)
+                continue
+        sub_rel = f"{pan_rel_path}/{sub_name}".strip("/")
+        sync_folder_reverse(pk, pan, int(f["id"]), sub_pk_id, sub_rel,
+                            dry_run, tmp_dir, progress)
 
 
 def main():
