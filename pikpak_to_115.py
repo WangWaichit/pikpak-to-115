@@ -579,12 +579,12 @@ def download_to_file(pk: PikPak, file_id: str, dest: Path, total_size: int) -> P
 # --------------------------------------------------------------------------- #
 
 class Pan115:
-    def __init__(self, cookies: str = "", refresh_token: str = ""):
+    def __init__(self, cookies: str = "", refresh_token: str = "", app_id: int = 0):
         from p115client import P115Client
         from p115client.fs import P115FileSystem
         if refresh_token:
             # OAuth refresh_token 模式
-            client = P115Client(refresh_token=refresh_token)
+            client = P115Client(refresh_token=refresh_token, app_id=app_id)
         else:
             client = P115Client(cookies)
         self.fs = P115FileSystem(client)

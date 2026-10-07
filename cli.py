@@ -104,6 +104,9 @@ def setup_wizard(cfg: dict) -> dict:
                 continue
             cfg["pan115_refresh"] = c
             cfg["pan115_cookies"] = ""
+            app_id = ask("115 开放平台 app_id (OpenList 默认 0 即可)",
+                         default=str(cfg.get("pan115_app_id", 0) or "0"))
+            cfg["pan115_app_id"] = int(app_id or 0)
         break  # 115 完成，进入 PikPak
 
     # ---- PikPak ----
@@ -461,7 +464,8 @@ def main():
     try:
         print("初始化 115 客户端 ...")
         if cfg.get("pan115_mode") == "2":
-            pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""))
+            pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""),
+                         app_id=int(cfg.get("pan115_app_id", 0) or 0))
         else:
             pan = Pan115(cfg.get("pan115_cookies", ""))
         print("  115 OK")
@@ -581,7 +585,8 @@ def main():
                 print(f"  PikPak 重连失败: {e}")
             try:
                 if cfg.get("pan115_mode") == "2":
-                    pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""))
+                    pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""),
+                                 app_id=int(cfg.get("pan115_app_id", 0) or 0))
                 else:
                     pan = Pan115(cfg.get("pan115_cookies", ""))
                 print("  115 重连 OK")
