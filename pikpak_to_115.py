@@ -393,6 +393,32 @@ class PikPak:
             cid = found
         return cid
 
+    def resolve_or_create(self, path: str) -> str:
+        """把 '/a/b/c' 解析成 PikPak folder id，不存在则逐级创建。"""
+        path = (path or "").strip("/")
+        cid = ""
+        if not path:
+            return cid
+        for seg in path.split("/"):
+            children = self.list_children(cid)
+            found = None
+            for it in children:
+                if it.get("kind") == "drive#folder" and it.get("name") == seg:
+                    found = it["id"]
+                    break
+            if found is None:
+                body = {"kind": "drive#folder", "name": seg}
+                if cid:
+                    body["parent_id"] = cid
+                j = self._request(
+                    "POST", f"{PK_DRIVE_HOST}/drive/v1/files",
+                    data=body, with_captcha_action="POST:/drive/v1/files",
+                )
+                found = (j.get("file") or {}).get("id", "")
+                log.info("  PikPak 创建目录: /%s", seg)
+            cid = found
+        return cid
+
     def list_by_name(self, parent_id: str = "") -> dict:
         """返回 {name: (size, file_id)}，只含文件。"""
         result = {}

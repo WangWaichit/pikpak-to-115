@@ -85,23 +85,31 @@ PROGRESS = {
 }
 
 
-def ask_target_mode(src_path: str, dst_path: str) -> str:
-    """选完源和目标后，问是直接传还是新建同名子文件夹。返回最终目标路径，空串=取消。"""
+def ask_target_mode(src_path: str, dst_parent: str) -> str:
+    """选完源和目标父目录后，问新建文件夹的名字。返回最终目标路径，空串=取消。"""
     src_name = src_path.strip("/").split("/")[-1] or "root"
-    new_dir = (dst_path.rstrip("/") + "/" + src_name) if dst_path else "/" + src_name
     print(f"""
-  源目录名: {src_name}
-  已选父目录: {dst_path or '/'}
-  [1] 直接传到 {dst_path or '/'}（内容直接合并进去，同名按大小覆盖）
-  [2] 在 {dst_path or '/'} 下新建「{src_name}」再传（{new_dir}）
+  源目录: {src_path or '/'}
+  源目录名: 「{src_name}」
+  目标父目录: {dst_parent or '/'}
+  [1] 直接复制过去：在 {dst_parent or '/'} 下建「{src_name}」（保持原名）
+  [2] 新建自定义文件夹：你输入一个新名字，把文件传进去
   [0] 取消
 """)
     c = input("  请选择 [0/1/2]: ").strip()
+    if c == "0":
+        return ""
     if c == "1":
-        return dst_path
-    if c == "2":
-        return new_dir
-    return ""
+        new_name = src_name
+    elif c == "2":
+        new_name = input("  请输入新文件夹名: ").strip()
+        if not new_name:
+            print("  ? 名字不能为空")
+            return ""
+    else:
+        print("  ? 无效输入")
+        return ""
+    return (dst_parent.rstrip("/") + "/" + new_name) if dst_parent else "/" + new_name
 
 
 def show_progress():
@@ -159,7 +167,7 @@ def run_task(direction: str, pk: PikPak, pan: Pan115,
             PROGRESS["done_files"] = PROGRESS["total_files"]
         else:  # 115 -> pikpak
             pan_cid = pan.resolve_or_create(src_path)
-            pk_root_id = pk.resolve_path(dst_path)
+            pk_root_id = pk.resolve_or_create(dst_path)
             items = list(pan.fs.iterdir(pan_cid))
             files = [x for x in items if not x.get("is_dir")]
             PROGRESS["total_files"] = len(files)
@@ -380,7 +388,7 @@ def main():
             src = browse_pan115(pan, cfg.get("last_115", "/"))
             if not src:
                 continue
-            print("\n--- 选择目标：PikPak 目录 ---")
+            print("\n--- 选择目标父目录（PikPak）---")
             dst = browse_pikpak(pk, cfg.get("last_pk", ""))
             if not dst:
                 continue
@@ -389,7 +397,7 @@ def main():
                 print("  已取消。")
                 continue
             print(f"\n  源:   115:{src}")
-            print(f"  目标: PikPak:{final_dst or '(根目录)'}")
+            print(f"  目标: PikPak:{final_dst}")
             ok = input("  开始复制? [Y/n]: ").strip().lower()
             if ok in ("n", "no"):
                 continue
@@ -408,7 +416,7 @@ def main():
             src = browse_pikpak(pk, cfg.get("last_pk", ""))
             if not src:
                 continue
-            print("\n--- 选择目标：115 目录 ---")
+            print("\n--- 选择目标父目录（115）---")
             dst = browse_pan115(pan, cfg.get("last_115", "/"))
             if not dst:
                 continue
