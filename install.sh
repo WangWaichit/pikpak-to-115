@@ -129,18 +129,7 @@ else
 fi
 chmod +x run.sh install.sh
 
-# ---- 生成 config.json 模板（如果不存在）----
-if [ ! -f config.json ]; then
-    cat > config.json <<'EOF'
-{
-  "pikpak_token": "",
-  "pan115_cookies": ""
-}
-EOF
-    echo "  已生成 config.json 模板"
-fi
-
-# ---- 生成 systemd 服务文件 ----
+# ---- systemd 服务文件（可选，用户后面自己 enable）----
 WORKDIR=$(pwd)
 SERVICE_FILE=/etc/systemd/system/pikpak-to-115.service
 $SUDO tee "$SERVICE_FILE" > /dev/null <<EOF
@@ -166,22 +155,7 @@ $SUDO systemctl daemon-reload
 echo "  已注册 systemd 服务: pikpak-to-115.service"
 
 echo
-echo "===== 安装完成 ====="
+echo "===== 安装完成，进入配置 ====="
 echo
-echo "1. 编辑配置（填 token 和 cookies）:"
-echo "     nano $WORKDIR/config.json"
-echo
-echo "2. 交互式启动（前台跑菜单）:"
-echo "     cd $WORKDIR && ./run.sh"
-echo
-echo "3. 后台常驻（systemd，开机自启）:"
-echo "     systemctl start pikpak-to-115"
-echo "     systemctl enable pikpak-to-115      # 开机自启"
-echo "     systemctl status pikpak-to-115     # 看状态"
-echo "     journalctl -u pikpak-to-115 -f     # 看日志"
-echo
-echo "4. 也支持原有的 nohup 模式:"
-echo "     ./run.sh daemon"
-echo "     ./run.sh status"
-echo "     ./run.sh stop"
-echo
+# 直接进 cli.py，它会自动问你 token/cookies
+exec ./run.sh
