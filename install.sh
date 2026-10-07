@@ -16,29 +16,46 @@ export DPKG_OPTIONS="--force-confdef --force-confold"
 REPO="https://github.com/WangWaichit/pikpak-to-115.git"
 DIR="pikpak-to-115"
 
-# ---- 等 apt 锁释放（新装 VPS 系统自动更新会锁 apt，最多等 5 分钟）----
-echo "[*] 检查 apt 锁..."
-for i in $(seq 1 60); do
-    if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
-       && ! fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
-       && ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
-        break
-    fi
-    PID=$(fuser /var/lib/dpkg/lock-frontend 2>/dev/null | awk '{print $1}')
-    echo "  apt 被 PID=$PID 占用，等 5 秒... ($i/60)"
-    sleep 5
-done
+# ---- 等包管理器锁释放（新装 VPS 系统自动更新会锁，最多等 5 分钟）----
+echo "[*] 检查包管理器锁..."
+wait_for_pkgmgr_lock() {
+    local locks=(
+        /var/lib/dpkg/lock-frontend
+        /var/lib/dpkg/lock
+        /var/lib/apt/lists/lock
+        /var/cache/apt/archives/lock
+        /var/run/dnf/lock.pid
+        /var/run/yum.pid
+        /var/run/rpm.pid
+        /lib/apk/db/lock
+    )
+    for i in $(seq 1 60); do
+        local busy=0
+        for l in "${locks[@]}"; do
+            [ -e "$l" ] || continue
+            if fuser "$l" >/dev/null 2>&1; then
+                local pid=$(fuser "$l" 2>/dev/null | awk '{print $1}')
+                echo "  锁 $l 被 PID=$pid 占用，等 5 秒... ($i/60)"
+                busy=1
+                break
+            fi
+        done
+        [ $busy -eq 0 ] && return 0
+        sleep 5
+    done
+    return 1
+}
 
-# 兜底：等完还锁，停掉 unattended-upgrades
-if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
-    echo "[*] 等满 5 分钟还在跑，停掉 unattended-upgrades..."
+if ! wait_for_pkgmgr_lock; then
+    echo "[*] 等满 5 分钟还在跑，停掉自动更新进程..."
     systemctl stop unattended-upgrades 2>/dev/null || true
-    pkill -f apt-get 2>/dev/null || true
+    systemctl stop packagekit 2>/dev/null || true
+    pkill -f "apt-get|dnf|yum|apk" 2>/dev/null || true
     sleep 2
     dpkg --configure -a 2>/dev/null || true
 fi
 
-echo "===== PikPak <-> 115 一键安装 v3.5 (零交互) ====="
+echo "===== PikPak <-> 115 一键安装 v3.6 (零交互) ====="
 echo
 
 # ---- root 检查 ----
