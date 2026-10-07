@@ -16,8 +16,18 @@ from pikpak_to_115 import (
 
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "config.json"
+PROGRESS_FILE = HERE / "progress.json"
 TMP_DIR = HERE / ".tmp_sync"
 TMP_DIR.mkdir(exist_ok=True)
+
+
+def flush_progress():
+    """把 PROGRESS 写到磁盘，供 ./run.sh status 读取。"""
+    try:
+        PROGRESS["updated_at"] = time.time()
+        PROGRESS_FILE.write_text(json.dumps(PROGRESS, ensure_ascii=False, indent=2))
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -147,6 +157,7 @@ def run_task(direction: str, pk: PikPak, pan: Pan115,
                     started_at=time.time(), current_file="",
                     done_files=0, total_files=0,
                     done_bytes=0, total_bytes=0)
+    flush_progress()
     try:
         if direction == "pikpak->115":
             pk_root = pk.resolve_path(src_path)
@@ -185,6 +196,7 @@ def run_task(direction: str, pk: PikPak, pan: Pan115,
         PROGRESS["error"] = str(e)
     finally:
         PROGRESS["running"] = False
+        flush_progress()
 
 
 # --------------------------------------------------------------------------- #

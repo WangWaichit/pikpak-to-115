@@ -99,12 +99,25 @@ UID=123456; CID=xxx; SEID=xxx; KID=xxx
 | `.pikpak_token.json` | PikPak 短期 token 缓存（自动生成） |
 | `.tmp_sync/` | 下载中的临时文件 |
 
-## 后台常驻
+## 后台常驻（关 SSH 不断）
+
+选完任务、确认开始后，直接关掉 SSH 窗口也不会断。推荐用法：
 
 ```bash
-nohup ./run.sh >> sync.log 2>&1 &
-tail -f sync.log
+# 1. 后台静默启动（首次会引导填 token/cookies）
+./run.sh daemon
+
+# 2. 看到菜单后正常选 3 或 4，选完源/目标、确认 Y，任务开始后台跑
+#    然后直接 Ctrl+] 关掉 SSH 窗口即可
+
+# 3. 下次连回来，随时看进度：
+./run.sh status
+
+# 4. 停止任务：
+./run.sh stop
 ```
+
+日志在 `sync.log`，进度状态写在 `progress.json`（都已 gitignore）。
 
 ## 注意
 
