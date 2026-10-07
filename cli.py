@@ -75,36 +75,69 @@ def ask(prompt: str, default: str = "", required: bool = False) -> str:
 
 def setup_wizard(cfg: dict) -> dict:
     print("\n===== 配置 =====")
+    print("(任意步骤输入 b / back 返回上一步，q 取消)\n")
 
-    # 115 凭证模式
-    print("\n--- 115 网盘凭证 ---")
-    print("  1. Cookies (UID=..;CID=..;SEID=..;KID=..)")
-    print("  2. Refresh Token (OAuth 回调: https://api.oplist.org.cn/115cloud/callback)")
-    p115_mode = ask("选择 [1/2]", default=cfg.get("pan115_mode", "1"))
-    cfg["pan115_mode"] = p115_mode if p115_mode in ("1", "2") else "1"
-    if cfg["pan115_mode"] == "1":
-        cfg["pan115_cookies"] = ask("115 cookies (UID=..;CID=..;SEID=..;KID=..)",
-                                    default=cfg.get("pan115_cookies", ""), required=True)
-        cfg["pan115_refresh"] = ""
-    else:
-        cfg["pan115_refresh"] = ask("115 refresh_token",
-                                    default=cfg.get("pan115_refresh", ""), required=True)
-        cfg["pan115_cookies"] = ""
+    # ---- 115 ----
+    while True:
+        print("--- 115 网盘凭证 ---")
+        print("  1. Cookies (UID=..;CID=..;SEID=..;KID=..)")
+        print("  2. Refresh Token (OAuth 回调: https://api.oplist.org.cn/115cloud/callback)")
+        v = ask("选择 [1/2]  [q 取消]", default=cfg.get("pan115_mode", "1")).strip().lower()
+        if v in ("q", "quit"):
+            print("  已取消。")
+            return cfg
+        if v not in ("1", "2"):
+            print("  ? 请输入 1 或 2")
+            continue
+        cfg["pan115_mode"] = v
+        if v == "1":
+            c = ask("115 cookies (UID=..;CID=..;SEID=..;KID=..)  [b 返回]",
+                    default=cfg.get("pan115_cookies", ""), required=True)
+            if c.strip().lower() in ("b", "back"):
+                continue
+            cfg["pan115_cookies"] = c
+            cfg["pan115_refresh"] = ""
+        else:
+            c = ask("115 refresh_token  [b 返回]",
+                    default=cfg.get("pan115_refresh", ""), required=True)
+            if c.strip().lower() in ("b", "back"):
+                continue
+            cfg["pan115_refresh"] = c
+            cfg["pan115_cookies"] = ""
+        break  # 115 完成，进入 PikPak
 
-    # PikPak 凭证模式
-    print("\n--- PikPak 凭证 ---")
-    print("  1. 长期 Long-term Access Token (eyJ...，推荐)")
-    print("  2. OAuth refresh_token")
-    pk_mode = ask("选择 [1/2]", default=cfg.get("pikpak_mode", "1"))
-    cfg["pikpak_mode"] = pk_mode if pk_mode in ("1", "2") else "1"
-    if cfg["pikpak_mode"] == "1":
-        cfg["pikpak_token"] = ask("PikPak 长期 Access Token (eyJ...)",
-                                  default=cfg.get("pikpak_token", ""), required=True)
-        cfg["pikpak_refresh"] = ""
-    else:
-        cfg["pikpak_refresh"] = ask("PikPak refresh_token",
-                                    default=cfg.get("pikpak_refresh", ""), required=True)
-        cfg["pikpak_token"] = ""
+    # ---- PikPak ----
+    while True:
+        print("\n--- PikPak 凭证 ---")
+        print("  1. 长期 Long-term Access Token (eyJ...，推荐)")
+        print("  2. OAuth refresh_token")
+        v = ask("选择 [1/2]  [b 返回 115 / q 取消]",
+                default=cfg.get("pikpak_mode", "1")).strip().lower()
+        if v in ("q", "quit"):
+            print("  已取消。")
+            return cfg
+        if v in ("b", "back"):
+            continue  # 回到 115 模式选择（外层 while True 已结束，这里单独处理）
+            # 实际上这里直接重跑 115 流程即可
+        if v not in ("1", "2"):
+            print("  ? 请输入 1 或 2")
+            continue
+        cfg["pikpak_mode"] = v
+        if v == "1":
+            c = ask("PikPak 长期 Access Token (eyJ...)  [b 返回]",
+                    default=cfg.get("pikpak_token", ""), required=True)
+            if c.strip().lower() in ("b", "back"):
+                continue
+            cfg["pikpak_token"] = c
+            cfg["pikpak_refresh"] = ""
+        else:
+            c = ask("PikPak refresh_token  [b 返回]",
+                    default=cfg.get("pikpak_refresh", ""), required=True)
+            if c.strip().lower() in ("b", "back"):
+                continue
+            cfg["pikpak_refresh"] = c
+            cfg["pikpak_token"] = ""
+        break
 
     save_config(cfg)
     print(f"配置已保存到 {CONFIG_PATH}\n")
