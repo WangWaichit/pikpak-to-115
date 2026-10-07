@@ -1,68 +1,63 @@
-# PikPak ↔ 115 网盘 双向同步工具
+# PikPak ↔ 115 双向同步 / Bidirectional Sync
 
-小内存 VPS 上跑的命令行工具，PikPak 和 115 网盘互相同步。流式传输、按文件名+大小智能去重、同名新文件自动覆盖旧文件。
+中文说明 / English README
 
 ---
 
-## 一、设备最低配置要求（全 VPS 通用）
+## 一、设备最低配置 / Requirements
 
-### 推荐操作系统（按优先级）
+### 推荐操作系统 / Recommended OS
 
-| 优先级 | 系统 | 适用场景 |
+| 优先级 | 中文 | English |
 |---|---|---|
-| 🥇 首选 | **Ubuntu 22.04 LTS** | 256M 内存小 VPS，deadsnakes PPA 最稳，脚本兼容性最好 |
-| 🥈 次选 | **Ubuntu 24.04 LTS** | 内存 ≥512M，系统自带 Python 3.12，不需要 PPA，安装最快 |
-| 🥉 备选 | **Debian 12 (Bookworm)** | 追求极简、长期挂机，资源占用最低 |
+| 🥇 首选 | **Ubuntu 22.04 LTS**（256M 小 VPS 首选） | **Ubuntu 22.04 LTS** (best for 256M VPS) |
+| 🥈 次选 | **Ubuntu 24.04 LTS**（≥512M，自带 Python 3.12） | **Ubuntu 24.04 LTS** (≥512M, ships with Python 3.12) |
+| 🥉 备选 | **Debian 12 (Bookworm)**（极简挂机） | **Debian 12 (Bookworm)** (minimal headless) |
 
-**不推荐**：Ubuntu 20.04（老系统包旧）、CentOS 7（已淘汰）、Alpine（musl 易编译报错）、Arch（滚动更新不稳定）。
+**不推荐 / Not recommended**: Ubuntu 20.04, CentOS 7, Alpine (musl issues), Arch (rolling).
 
-### 硬件配置
+### 硬件 / Hardware
 
-**最低配置（可正常运行）**
+| 项 | 最低 Min | 推荐 Rec |
+|---|---|---|
+| CPU | 1 vCPU | 1+ vCPU |
+| 内存 RAM | 256 MB | 512 MB+ |
+| 磁盘 Disk | 5 GB | 10 GB+ |
+| 网络 Network | 能访问 `api-drive.mypikpak.com` 和 `115.com` | same |
 
-- CPU：1 核 1 vCPU
-- 内存：256MB 及以上
-- 磁盘：5GB 空闲空间（存放程序 + 临时缓存）
-- 网络：能访问 `api-drive.mypikpak.com` 和 `115.com`
-
-**推荐配置（高速稳定传输）**
-
-- CPU：1 核及以上
-- 内存：512MB 及以上
-- 磁盘：10GB+ 空闲空间
-- 系统：Ubuntu 22.04 / 24.04 LTS
-
-> 磁盘注意：文件会先临时下载到本地再上传，磁盘空间至少要能装下你单次要传的最大那个文件，传完自动清理。
+> 磁盘注意 / Disk note: 文件先临时下载到本地再上传，磁盘至少要装得下单次最大文件，传完自动清理。
+> Files are downloaded locally before upload; disk must hold the largest single file. Cleaned up after.
 
 ---
 
-## 二、一键傻瓜式安装命令（复制直接跑）
+## 二、一键安装 / One-line Install
 
-全程自动识别系统、自动安装所有缺失依赖、自动更新程序，**无需任何手动操作**。
+**中文**：全程自动识别系统、自动装依赖、自动更新，无需手动操作。
+
+**English**: Auto-detects OS, installs missing dependencies, updates itself.
 
 ```bash
 wget -O- https://raw.githubusercontent.com/WangWaichit/pikpak-to-115/main/install.sh | bash
 ```
 
-或者用 curl：
+or / 或:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/WangWaichit/pikpak-to-115/main/install.sh | bash
 ```
 
-安装脚本自动完成：
-
-1. 自动检测你的 VPS 系统（Ubuntu / Debian / CentOS / Alpine 等）
-2. 自动安装：`git`、`wget`、`python3`、`pip3` 所有缺失组件
-3. 自动检测 Python 版本，版本过低自动升级适配
-4. 自动安装程序运行依赖库（requests、p115client）
-5. 自动拉取最新版程序代码，旧版本自动 `git pull` 更新
+脚本自动做 / What it does:
+1. 检测系统 / Detects OS (apt/dnf/yum/apk/pacman)
+2. 缺啥装啥 / Installs git/wget/python3/pip3
+3. Python < 3.12 时询问并自动安装 / Asks and installs Python 3.12 if needed
+4. 用 get-pip.py 修 distutils 问题 / Bootstraps pip via get-pip.py (fixes Python 3.12 distutils)
+5. 国内自动切清华镜像 / Uses Tsinghua mirror if VPS is in CN
+6. 装 requests + p115client / Installs deps
+7. clone / 更新仓库 / Clones or `git pull`s the repo
 
 ---
 
-## 三、启动程序
-
-安装完成后，直接输入以下命令进入主控菜单：
+## 三、启动 / Launch
 
 ```bash
 cd pikpak-to-115 && ./run.sh
@@ -70,62 +65,60 @@ cd pikpak-to-115 && ./run.sh
 
 ---
 
-## 四、首次使用配置（只需要配置一次）
+## 四、首次配置 / First-time Setup
 
-第一次启动会自动进入配置界面，依次粘贴两个凭证，直接回车即可：
+中文：第一次启动会问你两个凭证，粘贴回车即可。
 
-1. **PikPak 长期令牌**：粘贴开发者后台生成的 Long-term Access Token（JWT 格式 `eyJhbGciOi...`）
-2. **115 网盘 Cookies**：粘贴完整登录 Cookie（`UID` / `CID` / `SEID` / `KID` 齐全）
+English: On first run, paste your credentials.
 
-✅ 配置完成后自动保存，**永久生效，后续无需重复配置**。
+1. **PikPak Long-term Token** — JWT `eyJhbGciOi...` from PikPak dev console
+2. **115 Cookies** — `UID=..; CID=..; SEID=..; KID=..` from browser
 
----
-
-## 五、菜单功能详解（10 项全能菜单）
-
-所有目录浏览界面，均支持 **返回上一级 / 退回主菜单**，不会卡死。
-
-```
-===== 主控菜单 =====
-  1. 列出 115 目录          —— 浏览 115 网盘所有文件夹/文件
-  2. 列出 PikPak 目录       —— 浏览 PikPak 网盘所有文件夹/文件
-  3. 拷贝 115 目录到 PikPak  —— 115 → PikPak 双向同步
-  4. 拷贝 PikPak 目录到 115  —— PikPak → 115 双向同步
-  5. 查看复制进度           —— 实时查看后台传输状态
-  6. 重新配置文件           —— 更新令牌/Cookie（过期才用）
-  7. 测试 115 cookies 连通性 —— 检测 115 账号是否正常登录
-  8. 测试 PikPak token 连通性 —— 检测 PikPak 令牌是否有效
-  9. 测试双侧网盘连接        —— 一键检测两个网盘是否稳定可用
-  10. 退出程序
-```
-
-目录浏览里通用操作：
-
-- 数字 `1/2/3...` = 进对应子目录
-- `..` = 回上一层
-- `.` 或回车 = 选中当前目录
-- `0` = 取消，回主菜单
+✅ 永久保存，无需重复配置 / Saved permanently.
 
 ---
 
-## 六、核心传输功能（重点！傻瓜式操作）
+## 五、菜单 / Menu
 
-### 场景：传输任意文件夹（保留完整子目录结构）
+```
+===== 主控菜单 Main Menu =====
+  1. 列出 115 目录          List 115 directory
+  2. 列出 PikPak 目录       List PikPak directory
+  3. 拷贝 115 → PikPak      Copy 115 → PikPak
+  4. 拷贝 PikPak → 115      Copy PikPak → 115
+  5. 查看复制进度            Show sync progress
+  6. 重新配置文件            Reconfigure credentials
+  7. 测试 115 cookies        Test 115 cookies
+  8. 测试 PikPak token       Test PikPak token
+  9. 双侧连接测试            Test both (CN) / Test both
+  10. 退出                   Exit
+```
 
-以 **菜单 4（PikPak → 115）** 为例，菜单 3 操作逻辑完全一致：
+目录浏览通用操作 / In directory browser:
+- 数字 `1/2/3...` = enter subdir
+- `..` = up one level / 上一级
+- `.` 或 Enter = select current / 选中当前
+- `0` = cancel / 取消
 
-1. 选择菜单 4，进入 PikPak 目录浏览
-2. 选中你要传输的 **A 文件夹**（支持任意层级子目录）
-3. 选择 115 网盘的 **目标父目录**
-4. 弹出两种传输模式（按需选择）：
-   - **模式 1：原文件夹名传输** —— A 文件夹完整迁移，子目录结构不变（`A/X/XX` 完全保留）
-   - **模式 2：自定义新文件夹名传输** —— 手动输入新名称 B，最终路径变为 `B/X/XX`，**所有子文件、子目录结构完全不变**
-5. 确认 `Y` 后自动开始传输
+---
 
-### 例子
+## 六、传文件 / Copying Files
 
-源 PikPak：
+### 步骤 / Steps
 
+以菜单 4（PikPak → 115）为例 / Menu 4 (PikPak → 115) shown:
+
+1. 选 `4` / Choose `4`
+2. 选源 PikPak 文件夹 / Pick source folder
+3. 选目标父目录（115）/ Pick destination parent (115)
+4. 选新文件夹命名方式 / Choose naming:
+   - **`[1]` 保持原名 / Keep original name** — 直接建同名子文件夹
+   - **`[2]` 自定义新名 / Custom name** — 输入新名
+5. 确认 `Y` / Confirm
+
+### 例子 / Example
+
+源 / Source:
 ```
 /离线下载/电影/
 ├── 港片/
@@ -134,10 +127,9 @@ cd pikpak-to-115 && ./run.sh
 └── 好莱坞/盗梦空间.mp4
 ```
 
-选源 = `/离线下载/电影`，目标父目录 = `/备份`，新名 = `movie`：
+选 / Source = `/离线下载/电影`, 目标父目录 / Parent = `/备份`, 新名 / New name = `movie`:
 
-115 端结果：
-
+结果 / Result:
 ```
 /备份/movie/
 ├── 港片/
@@ -146,110 +138,96 @@ cd pikpak-to-115 && ./run.sh
 └── 好莱坞/盗梦空间.mp4
 ```
 
-子目录层级和文件名**原样保留**，只是根目录从"电影"换成了"movie"。
+子目录层级完全保留 / Subdirectory tree preserved.
 
-### 文件覆盖规则（全自动无需手动干预）
+### 覆盖规则 / Overwrite Rules
 
-| 情况 | 行为 |
+| 情况 / Case | 行为 / Action |
 |---|---|
-| 目标无同名文件 | 直接正常传输 |
-| 同名文件 + 新文件更大 | **自动删除旧小文件，覆盖传输新文件**（旧文件进回收站，可恢复） |
-| 同名文件 + 新文件更小/大小一致 | **自动跳过**，保留旧文件，不重复传输 |
-
-递归到所有子目录。
+| 目标无同名 / No same-name file | 直接传 / Upload |
+| 同名 + 新文件更大 / Same name, new is larger | **删旧传新 / Delete old, upload new** (old → recycle bin) |
+| 同名 + 新文件更小或相等 / New is smaller or equal | **跳过 / Skip** |
 
 ---
 
-## 七、后台静默挂机（关键功能，断 SSH 不断传输）
+## 七、后台挂机 / Background Mode
 
-所有传输支持**全程后台静默运行**，关闭 Xshell、断开服务器连接、本地关机，传输都不会中断。
+中文：关 SSH、断线、本地关机都不影响传输。
 
-### 1. 启动后台传输
-
-```bash
-cd pikpak-to-115 && ./run.sh daemon
-```
-
-正常进入菜单选择传输任务，确认后自动转入后台运行，可直接关闭 SSH 窗口。
-
-### 2. 随时查看进度
-
-重新连接 VPS 后，输入命令一键查看实时进度：
+English: Survives SSH disconnect, terminal close, local shutdown.
 
 ```bash
-cd pikpak-to-115 && ./run.sh status
+# 后台启动 / Start in background
+./run.sh daemon
+
+# 看进度 / Check progress
+./run.sh status
+
+# 停止 / Stop
+./run.sh stop
 ```
 
-可查看：传输方向、源/目标路径、已传文件数、传输百分比、当前传输文件、运行时长。
-
-示例：
-
+status 示例 / Example status:
 ```
------ 任务进度 -----
-  状态: 传输中
+----- 任务进度 / Progress -----
+  状态: 传输中 / Running
   方向: pikpak->115
   源:   /离线下载/电影
   目标: /备份/movie
   文件: 12/30 (40.0%)
   当前: 盗梦空间.mp4
   已运行: 352 秒
---------------------
-```
-
-### 3. 停止后台任务
-
-```bash
-cd pikpak-to-115 && ./run.sh stop
 ```
 
 ---
 
-## 八、程序更新方式
-
-输入一键更新命令，自动更新最新版本，**保留你的所有配置**：
+## 八、更新 / Update
 
 ```bash
 wget -O- https://raw.githubusercontent.com/WangWaichit/pikpak-to-115/main/install.sh | bash
 ```
 
----
-
-## 九、常见问题解答（小白必看）
-
-**Q1：配置信息会泄露吗？**
-A：所有令牌、Cookie 均保存在本地 `config.json`，已自动 gitignore，不会上传 GitHub。
-
-**Q2：传输中关闭服务器窗口会断吗？**
-A：不会。用 `./run.sh daemon` 启动后是后台进程，断线、关窗口不影响传输。
-
-**Q3：同名文件会乱覆盖吗？**
-A：不会。智能判断文件大小，只升级更新的大文件，不覆盖更优质的旧文件。
-
-**Q4：子文件夹结构会错乱吗？**
-A：不会。100% 保留原网盘目录层级，只允许修改顶层文件夹名称，子目录完全不变。
-
-**Q5：令牌/Cookie 失效怎么办？**
-A：直接选菜单 6【重新配置文件】，粘贴新凭证即可，无需重装程序。
-
-**Q6：同时能跑几个任务？**
-A：一个。已有任务在跑时选 3/4 会提示。
-
-**Q7：传一半中断了怎么办？**
-A：重新跑同一条任务即可。已传完的文件会按去重规则跳过。
+配置保留 / Your config is preserved.
 
 ---
 
-## 十、文件说明（无需手动修改）
+## 九、FAQ
 
-| 文件 | 作用 |
+**Q: 凭证会泄露吗？** / Are credentials leaked?
+A: 存在本地 `config.json`，已 gitignore。/ Stored locally in gitignored `config.json`.
+
+**Q: 关 SSH 会断吗？** / Does SSH disconnect kill the transfer?
+A: 不会，用 `daemon` 启动后是后台进程。/ No, `daemon` detaches.
+
+**Q: 同名文件会乱覆盖吗？** / Will it overwrite blindly?
+A: 不会，只在新文件更大时才替换。/ No, only replaces when new is larger.
+
+**Q: 能跑几个任务？** / How many parallel tasks?
+A: 一个。/ One.
+
+**Q: 传一半断了怎么办？** / What if transfer breaks mid-way?
+A: 重跑同一条任务即可，已传完的会跳过。/ Re-run; completed files are skipped.
+
+**Q: Token/Cookie 过期怎么办？** / Token expired?
+A: 菜单 6 重新配置。/ Menu 6 to reconfigure.
+
+---
+
+## 十、文件 / Files
+
+| 文件 File | 用途 Purpose |
 |---|---|
-| `pikpak_to_115.py` | 核心：PikPak/115 客户端、流式下载上传、双向同步 |
-| `cli.py` | 交互式菜单 |
-| `run.sh` | 一键启动 / daemon / status / stop |
-| `install.sh` | 一键安装脚本 |
-| `config.json` | 本地配置文件（令牌、Cookie、默认路径，已 gitignore） |
-| `progress.json` | 实时传输进度缓存（已 gitignore） |
-| `sync.log` | 运行日志文件（已 gitignore） |
-| `.tmp_sync/` | 下载中的临时文件（已 gitignore） |
+| `pikpak_to_115.py` | Core sync engine / 核心同步逻辑 |
+| `cli.py` | Interactive menu / 交互菜单 |
+| `run.sh` | launcher / 启动器 (daemon/status/stop) |
+| `install.sh` | One-line installer / 一键安装 |
+| `config.json` | Credentials (gitignored) |
+| `progress.json` | Live progress (gitignored) |
+| `sync.log` | Log (gitignored) |
+| `.tmp_sync/` | Partial downloads (gitignored) |
 
-所有隐私文件均已屏蔽云端上传，仅本地生效。
+---
+
+## Releases
+
+See [releases page](https://github.com/WangWaichit/pikpak-to-115/releases) for version history.
