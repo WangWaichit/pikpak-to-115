@@ -1,106 +1,113 @@
-# pikpak-to-115
+# PikPak ↔ 115 网盘同步工具
 
-PikPak → 115 网盘自动同步工具。专为小内存 VPS 设计，流式传输，内存占用恒定在 ~10MB。
+在小内存 VPS 上跑的双向同步工具：PikPak ↔ 115，流式传输、按文件名+大小智能去重、同名新文件自动覆盖旧文件。
 
-## 功能
-
-- 用 PikPak **长期 refresh token** 登录，access token 过期自动刷新并回写到本地 `.pikpak_token.json`
-- **流式边下边传**：下载按 1MB 一块写盘，115 上传按 10MB 分片，全程不把整个文件读进内存
-- **按 (文件名 + 大小) 去重**：115 已存在同名同大小文件就跳过，**绝不覆盖**
-- **递归保留目录结构**
-- **断点续传**：中断后 `.part` 文件保留，下次自动从断点继续
-- 单文件失败不中断整体，自动重试 3 次
-
-## 安装
+## 一键安装
 
 ```bash
-# 要求 Python 3.8+
-pip install requests p115client
+git clone https://github.com/WangWaichit/pikpak-to-115.git
+cd pikpak-to-115
+bash run.sh install
 ```
 
-> 小内存 VPS 提示：p115client 是纯 Python 包，装好后常驻内存大约 30~50MB，传输时再加 10MB 左右缓冲。
+首次运行 `./run.sh` 会自动引导你填 PikPak 长期令牌和 115 cookies。
 
-## 拿到凭证
+## 要求
 
-### 1) PikPak 凭证（二选一）
+- Python 3.8+
+- 小内存 VPS 友好：常驻内存 ~40MB，传输时按 1MB 块流式处理，不把整个文件读进内存
 
-**方式 A【推荐】：官方长期访问令牌 (Long-term Access Token)**
-
-1. 浏览器登录 https://mypikpak.com
-2. 进入「设置 / 开发者 / API」（不同版本菜单名可能略不同）
-3. 生成一个 Long-term Access Token
-4. 粘到 `.env` 的 `PIKPAK_LONG_TERM_TOKEN=` 后面
-
-程序会直接用它做 `Authorization: Bearer xxx` 调 API，**不需要换 token、不需要刷新**。
-
-**方式 B：OAuth refresh_token（备选）**
-
-如果你是从 pikpakapi / pikpak-tui / alist 等工具导出的 refresh_token，填到 `PIKPAK_REFRESH_TOKEN=` 即可，程序会自动换短期 access_token 并在轮换时写回 `.pikpak_token.json`。
-
-> 两种凭证不要同时填，脚本按 A → B 顺序取第一个非空的。
-
-### 2) 115 cookies
-
-1. 浏览器登录 https://115.com
-2. F12 → Application → Cookies → `https://115.com`
-3. 复制 `UID`、`CID`、`SEID`、`KID` 四个值，拼成：
-   ```
-   UID=1234567890; CID=xxxxx; SEID=xxxxx; KID=xxxxx
-   ```
-
-## 配置
+## 启动
 
 ```bash
-cp .env.example .env
-# 编辑 .env 填好上面两个凭证
+./run.sh
 ```
 
-## 运行
-
-```bash
-# 先 dry-run 看一遍会传哪些文件，不动 115
-python pikpak_to_115.py --dry-run
-
-# 正式同步
-python pikpak_to_115.py
+首次启动：
+```
+===== 配置 =====
+PikPak 长期访问令牌 (eyJ...):  ← 粘贴，回车
+115 cookies (UID=..;CID=..;SEID=..;KID=..):  ← 粘贴，回车
+配置已保存到 config.json
 ```
 
-建议用 nohup / systemd 后台跑：
-
-```bash
-nohup python pikpak_to_115.py >> sync.log 2>&1 &
-```
-
-## 工作原理
+之后进入主菜单：
 
 ```
-PikPak API ──流式下载(1MB块)──> 本地 .part 文件 ──p115client(10MB分片,自动秒传)──> 115
+===== PikPak <-> 115 =====
+  1. 列出 115 目录
+  2. 列出 PikPak 目录
+  3. 拷贝 115 目录文件到 PikPak 目录
+  4. 拷贝 PikPak 目录文件到 115 目录
+  5. 查看复制进度
+  6. 重新配置文件
+  7. 测试 115 cookies 连通性
+  8. 测试 PikPak token 连通性
+  9. 测试网盘是否连接（双侧）
+  10. 退出
+===========================
+请选择 [1-10]:
 ```
 
-- 每进一个 PikPak 目录，先把对应 115 目录的 `(name, size)` 列表拉下来建索引
-- 命中索引 → 跳过
-- 未命中 → 下载 → 上传 → 删本地 .part
-- 下载链接过期、access token 过期、网络抖动都有自动重试
+## 怎么用
+
+### 传文件（菜单 3 或 4）
+
+1. 选 `3`（115→PikPak）或 `4`（PikPak→115）
+2. 在源目录浏览树里数字进子目录，`.` 选中当前目录
+3. 在目标目录里再选一次
+4. 确认 `Y` 后后台开始传
+5. 回主菜单选 `5` 看进度
+
+### 去重规则
+
+| 情况 | 行为 |
+|---|---|
+| 目标里没有同名文件 | 正常传 |
+| 同名 + 新文件 ≤ 旧文件 | 跳过 |
+| 同名 + 新文件 > 旧文件 | 删旧传新（旧的进回收站，可恢复） |
+
+### 测试连通性（菜单 7/8/9）
+
+- `7`：单独测 115 cookies 能不能列目录
+- `8`：单独测 PikPak token 能不能查配额
+- `9`：两个一起测，同步前先跑一遍
+
+## 凭证说明
+
+### PikPak 长期令牌
+
+从 PikPak 网页版「设置 / 开发者 / API」生成的 Long-term Access Token（`eyJ...` 开头的 JWT），直接粘即可。
+
+### 115 cookies
+
+浏览器登录 https://115.com 后 F12 → Application → Cookies，复制 `UID`、`CID`、`SEID`、`KID` 拼成一行：
+
+```
+UID=123456; CID=xxx; SEID=xxx; KID=xxx
+```
 
 ## 文件说明
 
 | 文件 | 作用 |
 |---|---|
-| `pikpak_to_115.py` | 主程序 |
-| `.env` | 你自己填的凭证（已在 .gitignore 应忽略） |
-| `.pikpak_token.json` | 自动生成，存当前 access/refresh token，别删 |
-| `/tmp/pikpak_sync/*.part` | 下载中的临时文件，传完自动删 |
+| `pikpak_to_115.py` | 核心：PikPak/115 客户端、流式下载上传、双向同步 |
+| `cli.py` | 交互式菜单 |
+| `run.sh` | 一键启动（自动装依赖、引导配置） |
+| `.env.example` | 环境变量配置模板 |
+| `config.json` | 你的凭证（已 gitignore，不会上传） |
+| `.pikpak_token.json` | PikPak 短期 token 缓存（自动生成） |
+| `.tmp_sync/` | 下载中的临时文件 |
 
-## 常见问题
+## 后台常驻
 
-**Q: 115 目录里有同名但内容不同的文件会怎样？**
-A: 本程序用「文件名+大小」双重判断。同名但大小不同 → 会重新上传一份（115 会自动加 `(1)` 后缀），不会覆盖旧文件。
+```bash
+nohup ./run.sh >> sync.log 2>&1 &
+tail -f sync.log
+```
 
-**Q: PikPak 下载链接过期了怎么办？**
-A: 本程序每次下载前都重新调 `GET /drive/v1/files/{id}` 拿最新 `web_content_link`，不存在过期问题。
+## 注意
 
-**Q: 跑一半断电/进程被杀？**
-A: `.part` 文件留在 TMP_DIR，下次启动同一文件会自动用 HTTP Range 从断点续传，不用重下。
-
-**Q: 想只同步某种子目录？**
-A: 改 `.env` 里 `PIKPAK_SOURCE_DIR=/你要的目录`。
+- 115→PikPak 方向（菜单 3）的 PikPak 上传是新写的，第一次跑如果报错把日志发我
+- 同时只能跑一个任务
+- 用完记得去 https://github.com/settings/tokens revoke 用来 push 的 PAT

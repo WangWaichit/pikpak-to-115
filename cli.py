@@ -247,8 +247,76 @@ MAIN_MENU = """
   4. 拷贝 PikPak 目录文件到 115 目录
   5. 查看复制进度
   6. 重新配置文件
-  7. 退出
+  7. 测试 115 cookies 连通性
+  8. 测试 PikPak token 连通性
+  9. 测试网盘是否连接（双侧）
+  10. 退出
 ==========================="""
+
+
+def test_pan115(pan: Pan115) -> bool:
+    print("\n--- 测试 115 cookies ---")
+    try:
+        items = list(pan.fs.iterdir(0))
+        dirs = [x for x in items if x.get("is_dir")]
+        files = [x for x in items if not x.get("is_dir")]
+        print(f"  ✅ 连接成功，根目录有 {len(dirs)} 个文件夹, {len(files)} 个文件")
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"  ❌ 连接失败: {e}")
+        return False
+
+
+def test_pikpak(pk: PikPak) -> bool:
+    print("\n--- 测试 PikPak token ---")
+    try:
+        j = pk._request("GET", "https://api-drive.mypikpak.com/drive/v1/about")
+        used = j.get("used", "?")
+        total = j.get("total", "?")
+        try:
+            used_s = human_size(int(used))
+            total_s = human_size(int(total))
+        except Exception:
+            used_s, total_s = str(used), str(total)
+        print(f"  ✅ 连接成功，已用 {used_s} / 共 {total_s}")
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"  ❌ 连接失败: {e}")
+        return False
+
+
+def test_both(pk: PikPak, pan: Pan115):
+    r1 = test_pan115(pan)
+    r2 = test_pikpak(pk)
+    print()
+    if r1 and r2:
+        print("  ✅ 双侧连接稳定，可以开始同步。")
+    else:
+        print("  ⚠️ 有一侧连接失败，请先修复再同步。")
+    input("\n按回车继续...")
+
+
+def test_pan115(pan: Pan115) -> bool:
+    print("\n--- 测试 115 cookies ---")
+    try:
+        # 列根目录一个文件就够
+        items = list(pan.fs.iterdir(0))
+        print(f"  ✅ 连接成功，根目录有 {len(items)} 个条目")
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"  ❌ 连接失败: {e}")
+        return False
+
+
+def test_pikpak(pk: PikPak) -> bool:
+    print("\n--- 测试 PikPak token ---")
+    try:
+        items = pk.list_children("")
+        print(f"  ✅ 连接成功，根目录有 {len(items)} 个条目")
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"  ❌ 连接失败: {e}")
+        return False
 
 
 def main():
@@ -275,7 +343,7 @@ def main():
     while True:
         print(MAIN_MENU)
         try:
-            choice = input("请选择 [1-7]: ").strip()
+            choice = input("请选择 [1-10]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nbye")
             break
@@ -343,10 +411,18 @@ def main():
             pan = Pan115(cfg["pan115_cookies"])
             print("已用新配置重连。")
         elif choice == "7":
+            test_pan115(pan)
+            input("\n按回车继续...")
+        elif choice == "8":
+            test_pikpak(pk)
+            input("\n按回车继续...")
+        elif choice == "9":
+            test_both(pk, pan)
+        elif choice == "10":
             print("bye")
             break
         else:
-            print("  ? 请输入 1-7")
+            print("  ? 请输入 1-10")
 
 
 if __name__ == "__main__":
