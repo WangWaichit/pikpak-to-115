@@ -619,15 +619,16 @@ def main():
             else:
                 test_both(pk, pan)
         elif choice == "11":
-            # 卸载
-            print("\n--- 卸载 ---")
+            # 卸载：删除 VPS 上所有相关文件和目录
+            print("\n--- 卸载（彻底删除）---")
             print("将执行：")
-            print("  1. 停止并禁用 systemd 服务（如有）")
+            print("  1. 停止并禁用 systemd 服务")
             print("  2. 删除 /etc/systemd/system/pikpak-to-115.service")
-            print("  3. 删除 /usr/local/bin/pikpak 软链（如有）")
-            print("  4. 从 /root/.bashrc 删除 alias p（如有）")
-            print("  5. 保留项目目录（凭证和进度不删）")
-            ok = input("  确认卸载? 输入 YES 继续: ").strip()
+            print("  3. 删除 /usr/local/bin/pikpak 软链")
+            print("  4. 从 /root/.bashrc 删除 alias p")
+            print(f"  5. 删除项目目录 {HERE}（含凭证、配置、日志）")
+            print("  6. systemctl daemon-reload")
+            ok = input("  ⚠️  确认卸载? 输入 YES 继续: ").strip()
             if ok == "YES":
                 import shutil
                 subprocess.run(["systemctl", "stop", "pikpak-to-115"], check=False)
@@ -645,8 +646,16 @@ def main():
                              if "alias p=" not in l or "pikpak-to-115" not in l]
                     bashrc.write_text("\n".join(lines) + "\n")
                 subprocess.run(["systemctl", "daemon-reload"], check=False)
-                print("  ✅ 卸载完成。项目目录保留在:", HERE)
-                print("  如要彻底删除: rm -rf", HERE)
+                # 删项目目录
+                try:
+                    shutil.rmtree(HERE)
+                except Exception as e:
+                    print(f"  ! 删项目目录失败: {e}")
+                print("\n  ✅ 卸载完成。所有相关文件已删除。")
+                print("  你可以退出 SSH 重连，p 命令不再可用。")
+                # 直接退出，因为当前目录已删
+                import os
+                os._exit(0)
             else:
                 print("  已取消。")
             input("\n按回车继续...")
