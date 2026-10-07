@@ -815,45 +815,9 @@ def sync_folder_reverse(pk: PikPak, pan: Pan115,
                             dry_run, tmp_dir, progress)
 
 
-def main():
-    here = Path(__file__).resolve().parent
-    load_dotenv(here / ".env")
-
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true", help="只列计划，不实际上传")
-    args = ap.parse_args()
-
-    # 两种凭证二选一：
-    #   PIKPAK_LONG_TERM_TOKEN = 官方开发者后台生成的长期 Bearer token（推荐）
-    #   PIKPAK_REFRESH_TOKEN   = OAuth 登录拿到的 refresh_token（备选）
-    long_term_token = env("PIKPAK_LONG_TERM_TOKEN", "")
-    refresh_token = env("PIKPAK_REFRESH_TOKEN", "")
-    if not long_term_token and not refresh_token:
-        sys.exit("[FATAL] 请在 .env 里配置 PIKPAK_LONG_TERM_TOKEN（官方长期令牌）"
-                 "或 PIKPAK_REFRESH_TOKEN（OAuth refresh token），二选一")
-
-    pk_source = env("PIKPAK_SOURCE_DIR", "")            # 空 = 根目录
-    cookies = env("PAN115_COOKIES", required=True)
-    pan_target = env("PAN115_TARGET_DIR", "/pikpak")     # 115 目标目录
-    tmp_root = Path(env("TMP_DIR", "/tmp/pikpak_sync"))
-    tmp_root.mkdir(parents=True, exist_ok=True)
-
-    log.info("初始化 PikPak 客户端…")
-    pk = PikPak(access_token=long_term_token,
-                refresh_token=refresh_token,
-                token_store=here / ".pikpak_token.json")
-    log.info("初始化 115 客户端…")
-    pan = Pan115(cookies)
-
-    log.info("解析 PikPak 源目录: %s", pk_source or "/")
-    pk_root = pk.resolve_path(pk_source)
-    log.info("解析/创建 115 目标目录: %s", pan_target)
-    pan_root = pan.resolve_or_create(pan_target)
-
-    sync_folder(pk, pan, pk_root, pan_root, pk_source.strip("/"),
-                args.dry_run, tmp_root)
-    log.info("全部完成。")
-
-
+# 本文件只做库导出，入口统一走 cli.py（或 ./run.sh）
+# 不再提供 .env 环境变量模式，所有凭证都在 config.json 里。
 if __name__ == "__main__":
-    main()
+    import sys
+    print("请运行 ./run.sh 或 python3 cli.py 启动菜单。", file=sys.stderr)
+    sys.exit(1)

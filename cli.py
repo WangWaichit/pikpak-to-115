@@ -443,7 +443,12 @@ def main():
     if os.environ.get("PAN115_COOKIES"):
         cfg["pan115_cookies"] = os.environ["PAN115_COOKIES"]
 
-    if not cfg.get("pikpak_token") or not cfg.get("pan115_cookies"):
+    # 判断是否已配置：只要 PikPak 或 115 任意一个凭证字段非空，就跳过向导
+    def _has_pikpak():
+        return bool(cfg.get("pikpak_token") or cfg.get("pikpak_refresh"))
+    def _has_p115():
+        return bool(cfg.get("pan115_cookies") or cfg.get("pan115_refresh"))
+    if not (_has_pikpak() and _has_p115()):
         cfg = setup_wizard(cfg)
 
     # 凭证无效也能进菜单，只是连通/传输会失败
@@ -475,6 +480,9 @@ def main():
     print()
 
     while True:
+        pk_icon = "✅" if pk is not None else "❌"
+        p115_icon = "✅" if pan is not None else "❌"
+        print(f"[状态] PikPak:{pk_icon} | 115:{p115_icon}")
         print(MAIN_MENU)
         try:
             choice = input("请选择 [1-12]: ").strip()
