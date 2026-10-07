@@ -75,10 +75,37 @@ def ask(prompt: str, default: str = "", required: bool = False) -> str:
 
 def setup_wizard(cfg: dict) -> dict:
     print("\n===== 配置 =====")
-    cfg["pikpak_token"] = ask("PikPak 长期访问令牌 (eyJ...)",
-                              default=cfg.get("pikpak_token", ""), required=True)
-    cfg["pan115_cookies"] = ask("115 cookies (UID=..;CID=..;SEID=..;KID=..)",
-                                 default=cfg.get("pan115_cookies", ""), required=True)
+
+    # PikPak 凭证模式
+    print("\nPikPak 凭证模式:")
+    print("  1. 长期 Long-term Access Token (eyJ...，推荐)")
+    print("  2. OAuth refresh_token")
+    pk_mode = ask("选择 [1/2]", default=cfg.get("pikpak_mode", "1"))
+    cfg["pikpak_mode"] = pk_mode if pk_mode in ("1", "2") else "1"
+    if cfg["pikpak_mode"] == "1":
+        cfg["pikpak_token"] = ask("PikPak 长期 Access Token (eyJ...)",
+                                  default=cfg.get("pikpak_token", ""), required=True)
+        cfg["pikpak_refresh"] = ""
+    else:
+        cfg["pikpak_refresh"] = ask("PikPak refresh_token",
+                                    default=cfg.get("pikpak_refresh", ""), required=True)
+        cfg["pikpak_token"] = ""
+
+    # 115 凭证模式
+    print("\n115 凭证模式:")
+    print("  1. Cookies (UID=..;CID=..;SEID=..;KID=..)")
+    print("  2. Refresh Token (OAuth 回调: https://api.oplist.org.cn/115cloud/callback)")
+    p115_mode = ask("选择 [1/2]", default=cfg.get("pan115_mode", "1"))
+    cfg["pan115_mode"] = p115_mode if p115_mode in ("1", "2") else "1"
+    if cfg["pan115_mode"] == "1":
+        cfg["pan115_cookies"] = ask("115 cookies (UID=..;CID=..;SEID=..;KID=..)",
+                                    default=cfg.get("pan115_cookies", ""), required=True)
+        cfg["pan115_refresh"] = ""
+    else:
+        cfg["pan115_refresh"] = ask("115 refresh_token",
+                                    default=cfg.get("pan115_refresh", ""), required=True)
+        cfg["pan115_cookies"] = ""
+
     save_config(cfg)
     print(f"配置已保存到 {CONFIG_PATH}\n")
     return cfg
@@ -388,15 +415,22 @@ def main():
     pan = None
     try:
         print("\n初始化 PikPak 客户端 ...")
-        pk = PikPak(access_token=cfg["pikpak_token"],
-                    token_store=HERE / ".pikpak_token.json")
+        if cfg.get("pikpak_mode") == "2":
+            pk = PikPak(refresh_token=cfg.get("pikpak_refresh", ""),
+                        token_store=HERE / ".pikpak_token.json")
+        else:
+            pk = PikPak(access_token=cfg.get("pikpak_token", ""),
+                        token_store=HERE / ".pikpak_token.json")
         print("  PikPak OK")
     except Exception as e:  # noqa: BLE001
         print(f"  PikPak 初始化失败: {e}")
         print("  菜单仍可用，但涉及 PikPak 的操作会报错。")
     try:
         print("初始化 115 客户端 ...")
-        pan = Pan115(cfg["pan115_cookies"])
+        if cfg.get("pan115_mode") == "2":
+            pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""))
+        else:
+            pan = Pan115(cfg.get("pan115_cookies", ""))
         print("  115 OK")
     except Exception as e:  # noqa: BLE001
         print(f"  115 初始化失败: {e}")
@@ -502,14 +536,21 @@ def main():
         elif choice == "7":
             cfg = setup_wizard(cfg)
             try:
-                pk = PikPak(access_token=cfg["pikpak_token"],
-                            token_store=HERE / ".pikpak_token.json")
+                if cfg.get("pikpak_mode") == "2":
+                    pk = PikPak(refresh_token=cfg.get("pikpak_refresh", ""),
+                                token_store=HERE / ".pikpak_token.json")
+                else:
+                    pk = PikPak(access_token=cfg.get("pikpak_token", ""),
+                                token_store=HERE / ".pikpak_token.json")
                 print("  PikPak 重连 OK")
             except Exception as e:  # noqa: BLE001
                 pk = None
                 print(f"  PikPak 重连失败: {e}")
             try:
-                pan = Pan115(cfg["pan115_cookies"])
+                if cfg.get("pan115_mode") == "2":
+                    pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""))
+                else:
+                    pan = Pan115(cfg.get("pan115_cookies", ""))
                 print("  115 重连 OK")
             except Exception as e:  # noqa: BLE001
                 pan = None
