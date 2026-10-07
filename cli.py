@@ -53,9 +53,17 @@ def save_config(cfg: dict):
 
 def ask(prompt: str, default: str = "", required: bool = False) -> str:
     suffix = f" [{default}]" if default else ""
+    import sys
+    # 始终从 /dev/tty 读，避免 wget|bash 管道 stdin 是管道
+    try:
+        tty = open("/dev/tty", "r")
+    except Exception:
+        tty = sys.stdin
     while True:
         try:
-            val = input(prompt + suffix + ": ").strip()
+            sys.stdout.write(prompt + suffix + ": ")
+            sys.stdout.flush()
+            val = tty.readline().rstrip("\n").strip()
         except (EOFError, KeyboardInterrupt):
             return default
         if not val:

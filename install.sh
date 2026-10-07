@@ -194,7 +194,14 @@ $SUDO systemctl daemon-reload
 echo "  已注册 systemd 服务: pikpak-to-115.service"
 
 echo
-echo "===== 安装完成，进入配置 ====="
+echo "===== 安装完成 ====="
 echo
-# 直接进 cli.py，它会自动问你 token/cookies
-exec ./run.sh
+echo "接下来手动运行（不要从 wget 管道里跑，否则无法输入凭证）:"
+echo "  cd $WORKDIR && ./run.sh"
+echo
+echo "首次启动会问你 PikPak token 和 115 cookies。"
+echo
+echo "如要后台常驻+开机自启:"
+echo "  systemctl enable --now pikpak-to-115"
+echo "  journalctl -u pikpak-to-115 -f"
+echo
