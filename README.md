@@ -7,6 +7,35 @@
 
 ## 一、安装
 
+### 一键安装（推荐）
+
+在 VPS 上直接跑：
+
+```bash
+wget -O- https://raw.githubusercontent.com/WangWaichit/pikpak-to-115/main/install.sh | bash
+```
+
+或者用 curl：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WangWaichit/pikpak-to-115/main/install.sh | bash
+```
+
+脚本会自动：
+- 检测包管理器（apt / dnf / yum / apk）
+- 缺啥装啥：`git`、`python3`、`python3-pip`
+- 装 Python 依赖：`requests`、`p115client`
+- 克隆仓库到当前目录的 `pikpak-to-115/`
+
+装完进目录：
+
+```bash
+cd pikpak-to-115
+./run.sh
+```
+
+### 手动安装
+
 ```bash
 git clone https://github.com/WangWaichit/pikpak-to-115.git
 cd pikpak-to-115
