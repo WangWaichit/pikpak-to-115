@@ -355,7 +355,8 @@ class PikPak:
 
     # ---- 文件操作 ----------------------------------------------------------- #
     def list_children(self, parent_id: str):
-        """列出某目录下的文件/文件夹，自动分页。返回原始 dict 列表。"""
+        """列出某目录下的文件/文件夹，自动分页。返回原始 dict 列表。
+        PikPak 网页把 My Pack 里的文件合并展示到根目录，这里也合并。"""
         items, page_token = [], ""
         filters = json.dumps({"trashed": {"eq": False}})
         while True:
@@ -373,6 +374,21 @@ class PikPak:
             page_token = j.get("next_page_token", "")
             if not page_token:
                 break
+        # 根目录：把 My Pack 里的文件也合并进来（对齐网页 UI）
+        if parent_id == "":
+            my_pack = None
+            for it in items:
+                if it.get("kind") == "drive#folder" and it.get("name") == "My Pack":
+                    my_pack = it
+                    break
+            if my_pack:
+                try:
+                    inner = self.list_children(my_pack["id"])
+                    # 只合并文件，不合并 My Pack 里的文件夹（避免重复）
+                    merged = [it for it in inner if it.get("kind") == "drive#file"]
+                    items.extend(merged)
+                except Exception:
+                    pass
         return items
 
     def resolve_path(self, path: str) -> str:

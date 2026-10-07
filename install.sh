@@ -193,17 +193,22 @@ EOF
 $SUDO systemctl daemon-reload
 echo "  已注册 systemd 服务: pikpak-to-115.service"
 
-# ---- 注册全局命令 p 和 pikpak ----
-$SUDO ln -sf "$WORKDIR/run.sh" /usr/local/bin/pikpak
+# ---- 注册全局命令 p（用脚本，不用 alias，新开 SSH 也生效）----
+$SUDO rm -f /usr/local/bin/pikpak  # 删旧的 pikpak 软链
+cat > /tmp/p-run <<EOF
+#!/usr/bin/env bash
+cd "$WORKDIR" || exit 1
+exec ./run.sh
+EOF
+$SUDO mv /tmp/p-run /usr/local/bin/p
+$SUDO chmod +x /usr/local/bin/p
 
-# 加 alias p 到 /root/.bashrc（去重）
+# 同时在 .bashrc 里留个 alias 兜底（去重）
 ALIAS_LINE="alias p='cd $WORKDIR && ./run.sh'"
 if [ -f /root/.bashrc ]; then
     grep -qxF "$ALIAS_LINE" /root/.bashrc || echo "$ALIAS_LINE" >> /root/.bashrc
 fi
-# 同时给当前 shell 也生效
-eval "$ALIAS_LINE"
-echo "  已注册命令: p 和 pikpak（任意目录直接敲 p 回车即可）"
+echo "  已注册命令: p（任意目录直接敲 p 回车即可）"
 
 echo
 echo "===== 安装完成 ====="
