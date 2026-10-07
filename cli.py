@@ -76,23 +76,8 @@ def ask(prompt: str, default: str = "", required: bool = False) -> str:
 def setup_wizard(cfg: dict) -> dict:
     print("\n===== 配置 =====")
 
-    # PikPak 凭证模式
-    print("\nPikPak 凭证模式:")
-    print("  1. 长期 Long-term Access Token (eyJ...，推荐)")
-    print("  2. OAuth refresh_token")
-    pk_mode = ask("选择 [1/2]", default=cfg.get("pikpak_mode", "1"))
-    cfg["pikpak_mode"] = pk_mode if pk_mode in ("1", "2") else "1"
-    if cfg["pikpak_mode"] == "1":
-        cfg["pikpak_token"] = ask("PikPak 长期 Access Token (eyJ...)",
-                                  default=cfg.get("pikpak_token", ""), required=True)
-        cfg["pikpak_refresh"] = ""
-    else:
-        cfg["pikpak_refresh"] = ask("PikPak refresh_token",
-                                    default=cfg.get("pikpak_refresh", ""), required=True)
-        cfg["pikpak_token"] = ""
-
     # 115 凭证模式
-    print("\n115 凭证模式:")
+    print("\n--- 115 网盘凭证 ---")
     print("  1. Cookies (UID=..;CID=..;SEID=..;KID=..)")
     print("  2. Refresh Token (OAuth 回调: https://api.oplist.org.cn/115cloud/callback)")
     p115_mode = ask("选择 [1/2]", default=cfg.get("pan115_mode", "1"))
@@ -105,6 +90,21 @@ def setup_wizard(cfg: dict) -> dict:
         cfg["pan115_refresh"] = ask("115 refresh_token",
                                     default=cfg.get("pan115_refresh", ""), required=True)
         cfg["pan115_cookies"] = ""
+
+    # PikPak 凭证模式
+    print("\n--- PikPak 凭证 ---")
+    print("  1. 长期 Long-term Access Token (eyJ...，推荐)")
+    print("  2. OAuth refresh_token")
+    pk_mode = ask("选择 [1/2]", default=cfg.get("pikpak_mode", "1"))
+    cfg["pikpak_mode"] = pk_mode if pk_mode in ("1", "2") else "1"
+    if cfg["pikpak_mode"] == "1":
+        cfg["pikpak_token"] = ask("PikPak 长期 Access Token (eyJ...)",
+                                  default=cfg.get("pikpak_token", ""), required=True)
+        cfg["pikpak_refresh"] = ""
+    else:
+        cfg["pikpak_refresh"] = ask("PikPak refresh_token",
+                                    default=cfg.get("pikpak_refresh", ""), required=True)
+        cfg["pikpak_token"] = ""
 
     save_config(cfg)
     print(f"配置已保存到 {CONFIG_PATH}\n")
