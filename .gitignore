@@ -1,4 +1,6 @@
 .env
+config.json
 .pikpak_token.json
+.tmp_sync/
 __pycache__/
 *.pyc
