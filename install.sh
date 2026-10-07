@@ -161,7 +161,12 @@ if [ "$NEED_PY" -eq 1 ] && [ "$PKG" = "apt" ]; then
         echo "[*] 添加 deadsnakes PPA 并安装 python3.12 ..."
         $SUDO add-apt-repository -y ppa:deadsnakes/ppa
         $SUDO apt-get update -y
-        $SUDO apt-get install -y python3.12 python3.12-venv python3.12-dev
+        # 只装 python3.12 本体；-venv/-dev 找不到就跳过（本程序不需要）
+        $SUDO apt-get install -y python3.12 \
+            || { echo "[!] python3.12 安装失败"; exit 1; }
+        $SUDO apt-get install -y python3.12-venv python3.12-dev 2>/dev/null \
+            && echo "    python3.12-venv/dev 已装" \
+            || echo "    python3.12-venv/dev 跳过（不影响使用）"
     fi
 fi
 
