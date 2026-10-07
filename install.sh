@@ -89,10 +89,17 @@ command -v wget    >/dev/null 2>&1 || NEED+=(wget)
 
 # 检查 Python 3.12 是否可用（p115client 要求 >=3.12）
 NEED_PY=0
+CUR_PY_VER=""
 if command -v python3.12 >/dev/null 2>&1; then
     PY_BIN=python3.12
-elif python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>/dev/null; then
-    PY_BIN=python3
+elif command -v python3 >/dev/null 2>&1; then
+    if python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>/dev/null; then
+        PY_BIN=python3
+    else
+        CUR_PY_VER=$(python3 --version)
+        PY_BIN=""
+        NEED_PY=1
+    fi
 else
     PY_BIN=""
     NEED_PY=1
@@ -102,23 +109,39 @@ if [ -n "$PY_BIN" ]; then
     echo "    Python: $($PY_BIN --version)"
 fi
 
-# 如果 Python 3.12 没有，按系统装
+# 如果 Python 3.12 没有，询问用户是否安装
 if [ "$NEED_PY" -eq 1 ]; then
-    echo "[*] 需要安装 Python 3.12（p115client 要求 >=3.12）"
+    echo
+    echo "=========================================="
+    echo "  ⚠️  检测到 Python 版本过低"
+    if [ -n "$CUR_PY_VER" ]; then
+        echo "  当前版本: $CUR_PY_VER"
+    else
+        echo "  当前版本: 未安装"
+    fi
+    echo "  本程序依赖 p115client，要求 Python >= 3.12"
+    echo "=========================================="
+    printf "  是否自动安装 Python 3.12? [Y/n]: "
+    read ANSWER
+    case "$ANSWER" in
+        n|N|no|No|NO)
+            echo "  已取消。请手动安装 Python 3.12 后重跑本脚本。"
+            exit 1
+            ;;
+    esac
+
+    # 按系统加包
     case "$PKG" in
         apt)
-            # Ubuntu/Debian: 用 deadsnakes PPA
             NEED+=(software-properties-common)
             ;;
         dnf)
             NEED+=(python3.12 python3.12-pip)
             ;;
         yum)
-            # CentOS 7/8: 先开 EPEL + SCL
             NEED+=(python3.12 python3.12-pip)
             ;;
         apk)
-            # Alpine 3.20+ 自带 python3=3.11, 3.21+ 有 3.12
             NEED+=(python3 py3-pip)
             ;;
         pacman)
