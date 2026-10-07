@@ -85,6 +85,25 @@ PROGRESS = {
 }
 
 
+def ask_target_mode(src_path: str, dst_path: str) -> str:
+    """选完源和目标后，问是直接传还是新建同名子文件夹。返回最终目标路径，空串=取消。"""
+    src_name = src_path.strip("/").split("/")[-1] or "root"
+    new_dir = (dst_path.rstrip("/") + "/" + src_name) if dst_path else "/" + src_name
+    print(f"""
+  源目录名: {src_name}
+  已选父目录: {dst_path or '/'}
+  [1] 直接传到 {dst_path or '/'}（内容直接合并进去，同名按大小覆盖）
+  [2] 在 {dst_path or '/'} 下新建「{src_name}」再传（{new_dir}）
+  [0] 取消
+""")
+    c = input("  请选择 [0/1/2]: ").strip()
+    if c == "1":
+        return dst_path
+    if c == "2":
+        return new_dir
+    return ""
+
+
 def show_progress():
     print("\n----- 复制进度 -----")
     if not PROGRESS["running"] and not PROGRESS["error"]:
@@ -365,15 +384,19 @@ def main():
             dst = browse_pikpak(pk, cfg.get("last_pk", ""))
             if not dst:
                 continue
+            final_dst = ask_target_mode(src, dst)
+            if not final_dst:
+                print("  已取消。")
+                continue
             print(f"\n  源:   115:{src}")
-            print(f"  目标: PikPak:{dst or '(根目录)'}")
+            print(f"  目标: PikPak:{final_dst or '(根目录)'}")
             ok = input("  开始复制? [Y/n]: ").strip().lower()
             if ok in ("n", "no"):
                 continue
-            cfg["last_115"], cfg["last_pk"] = src, dst
+            cfg["last_115"], cfg["last_pk"] = src, final_dst
             save_config(cfg)
             t = threading.Thread(target=run_task,
-                                 args=("115->pikpak", pk, pan, src, dst),
+                                 args=("115->pikpak", pk, pan, src, final_dst),
                                  daemon=True)
             t.start()
             print("  已在后台开始。回主菜单选 5 看进度。")
@@ -389,15 +412,19 @@ def main():
             dst = browse_pan115(pan, cfg.get("last_115", "/"))
             if not dst:
                 continue
+            final_dst = ask_target_mode(src, dst)
+            if not final_dst:
+                print("  已取消。")
+                continue
             print(f"\n  源:   PikPak:{src}")
-            print(f"  目标: 115:{dst}")
+            print(f"  目标: 115:{final_dst}")
             ok = input("  开始复制? [Y/n]: ").strip().lower()
             if ok in ("n", "no"):
                 continue
-            cfg["last_pk"], cfg["last_115"] = src, dst
+            cfg["last_pk"], cfg["last_115"] = src, final_dst
             save_config(cfg)
             t = threading.Thread(target=run_task,
-                                 args=("pikpak->115", pk, pan, src, dst),
+                                 args=("pikpak->115", pk, pan, src, final_dst),
                                  daemon=True)
             t.start()
             print("  已在后台开始。回主菜单选 5 看进度。")
