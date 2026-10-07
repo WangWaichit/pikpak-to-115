@@ -193,11 +193,25 @@ EOF
 $SUDO systemctl daemon-reload
 echo "  已注册 systemd 服务: pikpak-to-115.service"
 
+# ---- 注册全局命令 p 和 pikpak ----
+$SUDO ln -sf "$WORKDIR/run.sh" /usr/local/bin/pikpak
+
+# 加 alias p 到 /root/.bashrc（去重）
+ALIAS_LINE="alias p='cd $WORKDIR && ./run.sh'"
+if [ -f /root/.bashrc ]; then
+    grep -qxF "$ALIAS_LINE" /root/.bashrc || echo "$ALIAS_LINE" >> /root/.bashrc
+fi
+# 同时给当前 shell 也生效
+eval "$ALIAS_LINE"
+echo "  已注册命令: p 和 pikpak（任意目录直接敲 p 回车即可）"
+
 echo
 echo "===== 安装完成 ====="
 echo
 echo "接下来手动运行（不要从 wget 管道里跑，否则无法输入凭证）:"
 echo "  cd $WORKDIR && ./run.sh"
+echo
+echo "或者直接任意目录敲: p"
 echo
 echo "首次启动会问你 PikPak token 和 115 cookies。"
 echo
