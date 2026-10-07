@@ -373,11 +373,25 @@ def main():
     if not cfg.get("pikpak_token") or not cfg.get("pan115_cookies"):
         cfg = setup_wizard(cfg)
 
-    print("\n连接 PikPak 和 115 ...")
-    pk = PikPak(access_token=cfg["pikpak_token"],
-                token_store=HERE / ".pikpak_token.json")
-    pan = Pan115(cfg["pan115_cookies"])
-    print("连接成功。\n")
+    # 凭证无效也能进菜单，只是连通/传输会失败
+    pk = None
+    pan = None
+    try:
+        print("\n初始化 PikPak 客户端 ...")
+        pk = PikPak(access_token=cfg["pikpak_token"],
+                    token_store=HERE / ".pikpak_token.json")
+        print("  PikPak OK")
+    except Exception as e:  # noqa: BLE001
+        print(f"  PikPak 初始化失败: {e}")
+        print("  菜单仍可用，但涉及 PikPak 的操作会报错。")
+    try:
+        print("初始化 115 客户端 ...")
+        pan = Pan115(cfg["pan115_cookies"])
+        print("  115 OK")
+    except Exception as e:  # noqa: BLE001
+        print(f"  115 初始化失败: {e}")
+        print("  菜单仍可用，但涉及 115 的操作会报错。")
+    print()
 
     while True:
         print(MAIN_MENU)
@@ -388,11 +402,19 @@ def main():
             break
 
         if choice == "1":
-            # 列出 115 目录（浏览后自动返回主菜单）
+            if pan is None:
+                print("  ! 115 未连接，请先选菜单 6 重新配置。")
+                continue
             browse_pan115(pan, cfg.get("last_115", "/"))
         elif choice == "2":
+            if pk is None:
+                print("  ! PikPak 未连接，请先选菜单 6 重新配置。")
+                continue
             browse_pikpak(pk, cfg.get("last_pk", ""))
         elif choice == "3":
+            if pan is None or pk is None:
+                print("  ! 115/PikPak 未连接，请先选菜单 6 重新配置。")
+                continue
             if PROGRESS["running"]:
                 print("  ! 已有任务在跑，先看进度或等它结束。")
                 continue
@@ -421,6 +443,9 @@ def main():
             t.start()
             print("  已在后台开始。回主菜单选 5 看进度。")
         elif choice == "4":
+            if pan is None or pk is None:
+                print("  ! 115/PikPak 未连接，请先选菜单 6 重新配置。")
+                continue
             if PROGRESS["running"]:
                 print("  ! 已有任务在跑，先看进度或等它结束。")
                 continue
@@ -452,19 +477,37 @@ def main():
             show_progress()
         elif choice == "6":
             cfg = setup_wizard(cfg)
-            # 重连
-            pk = PikPak(access_token=cfg["pikpak_token"],
-                        token_store=HERE / ".pikpak_token.json")
-            pan = Pan115(cfg["pan115_cookies"])
-            print("已用新配置重连。")
+            # 重连（失败也不崩，留 None 提示用户）
+            try:
+                pk = PikPak(access_token=cfg["pikpak_token"],
+                            token_store=HERE / ".pikpak_token.json")
+                print("  PikPak 重连 OK")
+            except Exception as e:  # noqa: BLE001
+                pk = None
+                print(f"  PikPak 重连失败: {e}")
+            try:
+                pan = Pan115(cfg["pan115_cookies"])
+                print("  115 重连 OK")
+            except Exception as e:  # noqa: BLE001
+                pan = None
+                print(f"  115 重连失败: {e}")
         elif choice == "7":
-            test_pan115(pan)
+            if pan is None:
+                print("  ! 115 未连接。")
+            else:
+                test_pan115(pan)
             input("\n按回车继续...")
         elif choice == "8":
-            test_pikpak(pk)
+            if pk is None:
+                print("  ! PikPak 未连接。")
+            else:
+                test_pikpak(pk)
             input("\n按回车继续...")
         elif choice == "9":
-            test_both(pk, pan)
+            if pan is None or pk is None:
+                print("  ! 至少有一侧未连接，先选菜单 6 重新配置。")
+            else:
+                test_both(pk, pan)
         elif choice == "10":
             print("bye")
             break
