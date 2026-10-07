@@ -393,6 +393,27 @@ class PikPak:
             cid = found
         return cid
 
+    def list_by_name(self, parent_id: str = "") -> dict:
+        """返回 {name: (size, file_id)}，只含文件。"""
+        result = {}
+        for c in self.list_children(parent_id):
+            if c.get("kind") == "drive#file":
+                try:
+                    size = int(c.get("size", 0))
+                except Exception:
+                    size = 0
+                result[c.get("name", "")] = (size, c["id"])
+        return result
+
+    def delete_file(self, file_id: str):
+        """删除 PikPak 文件（移到回收站）。"""
+        try:
+            self._request("DELETE", f"{PK_DRIVE_HOST}/drive/v1/files/{file_id}",
+                          with_captcha_action=f"DELETE:/drive/v1/files/{file_id}")
+            log.info("  PikPak 删除旧文件 id=%s", file_id)
+        except Exception as e:  # noqa: BLE001
+            log.warning("  PikPak 删除旧文件失败 id=%s: %s", file_id, e)
+
     def get_download_url(self, file_id: str) -> str:
         j = self._request(
             "GET", f"{PK_DRIVE_HOST}/drive/v1/files/{file_id}",
@@ -559,20 +580,28 @@ class Pan115:
         log.info("  115 创建目录: /%s (cid=%d)", name, attr["id"])
         return int(attr["id"])
 
-    def list_existing(self, cid: int) -> set:
-        """列出某 cid 下已存在文件的 {(name, size)} 集合。"""
+    def list_existing(self, cid: int) -> dict:
+        """列出某 cid 下已存在文件的 {name: (size, fid)} 字典。"""
         if cid in self._dir_cache:
             return self._dir_cache[cid]
-        result = set()
+        result = {}
         for child in self.fs.iterdir(cid):
             if not child.get("is_dir"):
                 try:
                     size = int(child.get("size", 0))
                 except Exception:
                     size = 0
-                result.add((child.get("name", ""), size))
+                result[child.get("name", "")] = (size, int(child["id"]))
         self._dir_cache[cid] = result
         return result
+
+    def delete_file(self, fid: int):
+        """删除 115 文件（移到回收站）。"""
+        try:
+            self.fs.client.fs_trash({"fid[0]": str(fid)})
+            log.info("  115 删除旧文件 fid=%s", fid)
+        except Exception as e:  # noqa: BLE001
+            log.warning("  115 删除旧文件失败 fid=%s: %s", fid, e)
 
     def invalidate(self, cid: int):
         """上传后清掉该目录缓存，下次重新列目录。"""
@@ -628,9 +657,16 @@ def sync_folder(pk: PikPak, pan: Pan115,
             size = 0
         file_id = f["id"]
 
-        if (name, size) in existing:
-            log.info("  [跳过] %s (%s) 已存在", name, human_size(size))
-            continue
+        # 去重逻辑：同名时比较大小
+        if name in existing:
+            old_size, old_fid = existing[name]
+            if size <= old_size:
+                log.info("  [跳过] %s (%s, 旧文件更大/相等)", name, human_size(size))
+                continue
+            log.info("  [覆盖] %s 旧文件 %s → 新文件 %s，删旧传新",
+                     name, human_size(old_size), human_size(size))
+            pan.delete_file(old_fid)
+            pan.invalidate(pan_cid)
 
         log.info("  [传输] %s (%s)", name, human_size(size))
         if dry_run:
@@ -685,24 +721,23 @@ def sync_folder_reverse(pk: PikPak, pan: Pan115,
     log.info("目录: 115:/%s  ->  PikPak:(%s)  子目录 %d 个, 文件 %d 个",
              pan_rel_path or "/", pk_parent_id or "(根)", len(folders), len(files))
 
-    # 115 侧没有 PikPak 的名字，简单用 (name, size) 去重：
-    # PikPak 目标目录下已有的 (name, size) 跳过
-    existing = set()
-    if pk_parent_id:
-        try:
-            for c in pk.list_children(pk_parent_id):
-                if c.get("kind") == "drive#file":
-                    try:
-                        existing.add((c.get("name", ""), int(c.get("size", 0))))
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+    # PikPak 目标目录已有的 {name: (size, file_id)}
+    existing = {}
+    try:
+        existing = pk.list_by_name(pk_parent_id)
+    except Exception:
+        pass
 
     for name, size, fid in files:
-        if (name, size) in existing:
-            log.info("  [跳过] %s (%s) 已存在", name, human_size(size))
-            continue
+        if name in existing:
+            old_size, old_id = existing[name]
+            if size <= old_size:
+                log.info("  [跳过] %s (%s, 旧文件更大/相等)", name, human_size(size))
+                continue
+            log.info("  [覆盖] %s 旧 %s → 新 %s，删旧传新",
+                     name, human_size(old_size), human_size(size))
+            pk.delete_file(old_id)
+
         log.info("  [传输] %s (%s)", name, human_size(size))
         if dry_run:
             continue
