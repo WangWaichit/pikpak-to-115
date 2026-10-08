@@ -22,10 +22,10 @@ LOG_FILE="./sync.log"
 if [ $# -ge 1 ]; then
     case "$1" in
         install)
-            $PY -c "import requests, p115client" 2>/dev/null && { echo "[*] 依赖已就绪。"; exit 0; }
+            $PY -c "import requests" 2>/dev/null && { echo "[*] 依赖已就绪。"; exit 0; }
             echo "[*] 安装依赖 ..."
-            pip3 install --user --break-system-packages requests p115client 2>/dev/null \
-                || pip3 install --user requests p115client
+            $PY -m pip install --break-system-packages requests oss2 2>/dev/null \
+                || $PY -m pip install requests oss2
             exit 0 ;;
         status)
             if [ ! -f progress.json ]; then
@@ -87,10 +87,10 @@ PYEOF
 fi
 
 # ---- 依赖 ----
-$PY -c "import requests, p115client" 2>/dev/null || {
+$PY -c "import requests" 2>/dev/null || {
     echo "[*] 安装依赖 ..."
-    pip3 install --user --break-system-packages requests p115client 2>/dev/null \
-        || pip3 install --user requests p115client
+    $PY -m pip install --break-system-packages requests oss2 2>/dev/null \
+        || $PY -m pip install requests oss2
 }
 
 # ---- 进交互菜单 ----

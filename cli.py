@@ -270,7 +270,7 @@ def run_task(direction: str, pk: PikPak, pan: Pan115,
         else:  # 115 -> pikpak
             pan_cid = pan.resolve_or_create(src_path)
             pk_root_id = pk.resolve_or_create(dst_path)
-            items = list(pan.fs.iterdir(pan_cid))
+            items = list(pan.iterdir(pan_cid))
             files = [x for x in items if not x.get("is_dir")]
             PROGRESS["total_files"] = len(files)
             for f in files:
@@ -334,13 +334,13 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
     if cur:
         for seg in cur.split("/"):
             found = pan._find_child_dir(cid, seg)
-            if found < 0:
+            if not found:
                 cid = 0
                 cur = ""
                 break
             cid = found
     while True:
-        items = list(pan.fs.iterdir(cid))
+        items = list(pan.iterdir(cid))
         dirs = [x for x in items if x.get("is_dir")]
         files = [x for x in items if not x.get("is_dir")]
         print(f"\n--- 115: /{cur or ''}  ({len(dirs)} 目录, {len(files)} 文件) ---")
@@ -359,7 +359,7 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
                 if cur:
                     for seg in cur.split("/"):
                         found = pan._find_child_dir(cid, seg)
-                        if found < 0:
+                        if not found:
                             cid = 0
                             cur = ""
                             break
@@ -399,7 +399,7 @@ MAIN_MENU = """
 def test_pan115(pan: Pan115) -> bool:
     print("\n--- 测试 115 cookies ---")
     try:
-        items = list(pan.fs.iterdir(0))
+        items = list(pan.iterdir(0))
         dirs = [x for x in items if x.get("is_dir")]
         files = [x for x in items if not x.get("is_dir")]
         print(f"  ✅ 连接成功，根目录有 {len(dirs)} 个文件夹, {len(files)} 个文件")
@@ -442,7 +442,7 @@ def test_pan115(pan: Pan115) -> bool:
     print("\n--- 测试 115 cookies ---")
     try:
         # 列根目录一个文件就够
-        items = list(pan.fs.iterdir(0))
+        items = list(pan.iterdir(0))
         print(f"  ✅ 连接成功，根目录有 {len(items)} 个条目")
         return True
     except Exception as e:  # noqa: BLE001

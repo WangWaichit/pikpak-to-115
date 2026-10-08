@@ -595,102 +595,213 @@ def download_to_file(pk: PikPak, file_id: str, dest: Path, total_size: int) -> P
 # --------------------------------------------------------------------------- #
 
 class Pan115:
-    def __init__(self, cookies: str = "", refresh_token: str = "", app_id: int = 0):
-        from p115client import P115Client
-        from p115client.fs import P115FileSystem
-        if refresh_token:
-            # 手动刷新 token（兼容 OpenList 等第三方 OAuth 应用的 refresh_token）
-            # 115 开放平台 refreshToken 接口只需要 refresh_token，不需要 app_id
-            import requests as _req
-            r = _req.post(
-                "https://qrcodeapi.115.com/open/refreshToken",
-                data={"refresh_token": refresh_token},
-                timeout=15,
-            )
-            j = r.json()
-            if not j.get("access_token"):
-                raise RuntimeError(f"115 refresh_token 刷新失败: {j}")
-            access_token = j["access_token"]
-            self.new_refresh_token = j.get("refresh_token", "")
-            client = P115Client(access_token=access_token)
-        else:
-            self.new_refresh_token = ""
-            client = P115Client(cookies)
-        self.fs = P115FileSystem(client)
-        # 缓存：cid -> {(name, size)}
-        self._dir_cache: dict[int, set] = {}
+    """115 开放平台客户端（OAuth refresh_token，兼容 OpenList）。"""
+    API = "https://proapi.115.com"
+    PASSPORT = "https://passportapi.115.com"
 
-    def resolve_or_create(self, path: str) -> int:
-        """把 '/a/b' 解析成 115 目录 cid，不存在则逐级创建。根目录返回 0。"""
+    def __init__(self, refresh_token: str = "", cookies: str = ""):
+        import requests as _req
+        self._req = _req
+        self.refresh_token = refresh_token or ""
+        self.access_token = ""
+        self.new_refresh_token = ""
+        self._dir_cache: dict = {}
+        if self.refresh_token:
+            self._do_refresh()
+        else:
+            raise RuntimeError("115 需要 refresh_token（开放平台OAuth）")
+
+    # ---- token ----
+    def _do_refresh(self):
+        r = self._req.post(
+            f"{self.PASSPORT}/open/refreshToken",
+            data={"refresh_token": self.refresh_token},
+            timeout=15,
+        )
+        j = r.json()
+        if not j.get("access_token"):
+            raise RuntimeError(f"115 refresh_token 刷新失败: {j}")
+        self.access_token = j["access_token"]
+        self.new_refresh_token = j.get("refresh_token", self.refresh_token)
+        log.info("  115 access_token 刷新成功")
+
+    def _headers(self):
+        return {"Authorization": f"Bearer {self.access_token}"}
+
+    def _get(self, path, params=None):
+        r = self._req.get(f"{self.API}{path}", headers=self._headers(),
+                          params=params or {}, timeout=30)
+        j = r.json()
+        if not j.get("state") and j.get("code") == 99:
+            self._do_refresh()
+            r = self._req.get(f"{self.API}{path}", headers=self._headers(),
+                              params=params or {}, timeout=30)
+            j = r.json()
+        return j
+
+    def _post(self, path, data=None):
+        r = self._req.post(f"{self.API}{path}", headers=self._headers(),
+                           data=data or {}, timeout=30)
+        j = r.json()
+        if not j.get("state") and j.get("code") == 99:
+            self._do_refresh()
+            r = self._req.post(f"{self.API}{path}", headers=self._headers(),
+                               data=data or {}, timeout=30)
+            j = r.json()
+        return j
+
+    # ---- 目录浏览 ----
+    def iterdir(self, cid):
+        """返回 [{is_dir, id, name, size}]，兼容旧接口。"""
+        cid = str(cid)
+        items = []
+        offset = 0
+        while True:
+            j = self._get("/open/ufile/files", {
+                "cid": cid, "limit": 200, "offset": offset,
+                "show_dir": 1, "asc": 0, "o": "file_name",
+            })
+            data = j.get("data", [])
+            for f in data:
+                is_dir = f.get("fc") == "0"
+                items.append({
+                    "is_dir": is_dir,
+                    "id": str(f.get("fid", "")),
+                    "name": f.get("fn", ""),
+                    "size": int(f.get("fs", 0)),
+                })
+            total = j.get("count", 0)
+            offset += len(data)
+            if offset >= total or not data:
+                break
+        return items
+
+    def resolve_or_create(self, path):
         path = (path or "").strip("/")
-        cid = 0
+        cid = "0"
         if not path:
             return cid
         for seg in path.split("/"):
             cid = self._ensure_child_dir(cid, seg)
         return cid
 
-    def _ensure_child_dir(self, parent_cid: int, name: str) -> int:
-        for child in self.fs.iterdir(parent_cid):
-            if child.get("is_dir") and child.get("name") == name:
-                return int(child["id"])
-        # 不存在 → 创建
-        attr = self.fs.mkdir(parent_cid, name)
-        log.info("  115 创建目录: /%s (cid=%d)", name, attr["id"])
-        return int(attr["id"])
+    def _ensure_child_dir(self, parent_cid, name):
+        for child in self.iterdir(parent_cid):
+            if child["is_dir"] and child["name"] == name:
+                return child["id"]
+        j = self._post("/open/folder/add", {
+            "pid": str(parent_cid), "file_name": name,
+        })
+        fid = j.get("file_id", "")
+        log.info("  115 创建目录: /%s (fid=%s)", name, fid)
+        return str(fid)
 
-    def _find_child_dir(self, parent_cid: int, name: str) -> int:
-        """只查找不创建。找不到返回 -1。"""
-        for child in self.fs.iterdir(parent_cid):
-            if child.get("is_dir") and child.get("name") == name:
-                return int(child["id"])
-        return -1
+    def _find_child_dir(self, parent_cid, name):
+        for child in self.iterdir(parent_cid):
+            if child["is_dir"] and child["name"] == name:
+                return child["id"]
+        return ""
 
-    def list_existing(self, cid: int) -> dict:
-        """列出某 cid 下已存在文件的 {name: (size, fid)} 字典。"""
+    def list_existing(self, cid):
+        cid = str(cid)
         if cid in self._dir_cache:
             return self._dir_cache[cid]
         result = {}
-        for child in self.fs.iterdir(cid):
-            if not child.get("is_dir"):
-                try:
-                    size = int(child.get("size", 0))
-                except Exception:
-                    size = 0
-                result[child.get("name", "")] = (size, int(child["id"]))
+        for child in self.iterdir(cid):
+            if not child["is_dir"]:
+                result[child["name"]] = (child["size"], child["id"])
         self._dir_cache[cid] = result
         return result
 
-    def delete_file(self, fid: int):
-        """删除 115 文件（移到回收站）。"""
-        try:
-            self.fs.client.fs_trash({"fid[0]": str(fid)})
-            log.info("  115 删除旧文件 fid=%s", fid)
-        except Exception as e:  # noqa: BLE001
-            log.warning("  115 删除旧文件失败 fid=%s: %s", fid, e)
-
-    def invalidate(self, cid: int):
-        """上传后清掉该目录缓存，下次重新列目录。"""
-        self._dir_cache.pop(cid, None)
-
-    def upload(self, local_path: Path, filename: str, cid: int):
-        self.fs.upload(cid, file=str(local_path), filename=filename)
-
-    def download(self, file_id: int, dest: Path):
-        """从 115 下载文件到本地 dest。"""
-        self.fs.download(file_id, str(dest))
-
-    def list_files_in_dir(self, cid: int):
-        """返回 [(name, size, fid)]，文件（非目录）。"""
+    def list_files_in_dir(self, cid):
         out = []
-        for child in self.fs.iterdir(cid):
-            if not child.get("is_dir"):
-                try:
-                    size = int(child.get("size", 0))
-                except Exception:
-                    size = 0
-                out.append((child.get("name", ""), size, int(child["id"])))
+        for child in self.iterdir(cid):
+            if not child["is_dir"]:
+                out.append((child["name"], child["size"], child["id"]))
         return out
+
+    def delete_file(self, fid):
+        try:
+            self._post("/open/ufile/delete", {
+                "file_id[0]": str(fid),
+            })
+            log.info("  115 删除旧文件 fid=%s", fid)
+        except Exception as e:
+            log.warning("  115 删除旧文件失败: %s", e)
+
+    def invalidate(self, cid):
+        self._dir_cache.pop(str(cid), None)
+
+    # ---- 上传 ----
+    def upload(self, local_path, filename, cid):
+        """通过 115 开放平台 OSS 上传文件。"""
+        import hashlib, os
+        size = os.path.getsize(local_path)
+        # 计算 sha1
+        h = hashlib.sha1()
+        with open(local_path, "rb") as f:
+            while True:
+                chunk = f.read(1 << 20)
+                if not chunk:
+                    break
+                h.update(chunk)
+        sha1 = h.hexdigest().upper()
+        # 前128k sha1
+        h2 = hashlib.sha1()
+        with open(local_path, "rb") as f:
+            h2.update(f.read(128 * 1024))
+        preid = h2.hexdigest().upper()
+
+        # 1. upload init
+        j = self._post("/open/upload/init", {
+            "file_name": filename,
+            "file_size": size,
+            "target": f"U_1_{cid}",
+            "fileid": sha1,
+            "preid": preid,
+        })
+        status = j.get("status", 0)
+        if status == 2:
+            log.info("  115 秒传成功: %s", filename)
+            return
+
+        # 2. get OSS token
+        tok = self._get("/open/upload/get_token")
+        endpoint = tok.get("endpoint", "")
+        ak = tok.get("AccessKeyId", "")
+        sk = tok.get("AccessKeySecret", "")
+        st = tok.get("SecurityToken", "")
+
+        # 3. upload to OSS
+        import oss2
+        auth = oss2.StsAuth(ak, sk, st)
+        bucket = oss2.Bucket(auth, endpoint, j["bucket"])
+        callback = j.get("callback", {})
+        if isinstance(callback, list):
+            callback = callback[0] if callback else {}
+        cb = callback.get("callback", "")
+        cbvar = callback.get("callback_var", "")
+        headers = {}
+        if cb:
+            import base64
+            headers["x-oss-callback"] = base64.b64encode(
+                cb.encode()).decode()
+            if cbvar:
+                headers["x-oss-callback-var"] = base64.b64encode(
+                    cbvar.encode()).decode()
+        with open(local_path, "rb") as f:
+            bucket.put_object(j["object"], f, headers=headers)
+
+    def download(self, file_id, dest):
+        """从 115 下载文件。"""
+        j = self._get("/open/ufile/downurl", {"pick_code": file_id})
+        url = list(j.values())[0].get("url", "") if j else ""
+        if not url:
+            raise RuntimeError("无法获取下载链接")
+        r = self._req.get(url, stream=True, timeout=60)
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(1 << 20):
+                f.write(chunk)
 
 
 # --------------------------------------------------------------------------- #
@@ -771,7 +882,7 @@ def sync_folder_reverse(pk: PikPak, pan: Pan115,
                         dry_run: bool, tmp_dir: Path,
                         progress=None):
     """递归同步 115 目录到 PikPak。progress 为可选 dict，用于 CLI 显示进度。"""
-    items = list(pan.fs.iterdir(pan_cid))
+    items = list(pan.iterdir(pan_cid))
     folders = [x for x in items if x.get("is_dir")]
     files = []
     for x in items:
