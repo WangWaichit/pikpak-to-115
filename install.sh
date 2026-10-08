@@ -137,13 +137,16 @@ install_py312() {
                 $SUDO mkdir -p /etc/apt/sources.list.d
                 echo "deb https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $CODENAME main" \
                     | $SUDO tee /etc/apt/sources.list.d/deadsnakes.list > /dev/null
-                $SUDO apt-key adv --keyserver keyserver.ubuntu.com \
-                    --recv-keys F23C5A6CF475977595C89F51BA6932366A755776 2>/dev/null \
-                    || $SUDO apt-get install -y gnupg || true
+                # 导入 GPG key
+                $SUDO apt-get install -y gnupg ca-certificates || true
+                curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
+                    | gpg --dearmor 2>/dev/null \
+                    | $SUDO tee /etc/apt/trusted.gpg.d/deadsnakes.gpg > /dev/null
             fi
-            $SUDO apt-get update -y || true
+            $SUDO apt-get update -y
             $SUDO apt-get install -y python3.12 python3.12-venv python3.12-dev || {
-                echo "  [!] apt 装 python3.12 失败"
+                echo "  [!] apt 装 python3.12 失败，PPA 源可能没生效"
+                $SUDO cat /etc/apt/sources.list.d/deadsnakes.list 2>/dev/null
                 return 1
             }
             ;;
