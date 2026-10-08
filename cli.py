@@ -388,7 +388,7 @@ MAIN_MENU = """
   5. 拷贝 PikPak 目录文件到 115 目录
   6. 查看复制进度
   7. 重新配置文件
-  8. 测试 115 cookies 连通性
+  8. 测试 115 连通性
   9. 测试 PikPak token 连通性
   10. 测试网盘是否连接（双侧）
   11. 卸载程序
@@ -397,7 +397,7 @@ MAIN_MENU = """
 
 
 def test_pan115(pan: Pan115) -> bool:
-    print("\n--- 测试 115 cookies ---")
+    print("\n--- 测试 115 OAuth ---")
     try:
         items = list(pan.iterdir(0))
         dirs = [x for x in items if x.get("is_dir")]
@@ -439,7 +439,7 @@ def test_both(pk: PikPak, pan: Pan115):
 
 
 def test_pan115(pan: Pan115) -> bool:
-    print("\n--- 测试 115 cookies ---")
+    print("\n--- 测试 115 OAuth ---")
     try:
         # 列根目录一个文件就够
         items = list(pan.iterdir(0))
@@ -499,10 +499,9 @@ def main():
     try:
         print("初始化 115 客户端 ...")
         if cfg.get("pan115_mode") == "2":
-            pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""),
-                         app_id=int(cfg.get("pan115_app_id", 0) or 0))
+            pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""))
         else:
-            pan = Pan115(cfg.get("pan115_cookies", ""))
+            pan = Pan115(cookies=cfg.get("pan115_cookies", ""))
         print("  115 OK")
     except Exception as e:  # noqa: BLE001
         print(f"  115 初始化失败: {e}")
@@ -623,10 +622,9 @@ def main():
                 print(f"  PikPak 重连失败: {e}")
             try:
                 if cfg.get("pan115_mode") == "2":
-                    pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""),
-                                 app_id=int(cfg.get("pan115_app_id", 0) or 0))
+                    pan = Pan115(refresh_token=cfg.get("pan115_refresh", ""))
                 else:
-                    pan = Pan115(cfg.get("pan115_cookies", ""))
+                    pan = Pan115(cookies=cfg.get("pan115_cookies", ""))
                 print("  115 重连 OK")
             except Exception as e:  # noqa: BLE001
                 pan = None
