@@ -599,9 +599,22 @@ class Pan115:
         from p115client import P115Client
         from p115client.fs import P115FileSystem
         if refresh_token:
-            # OAuth refresh_token 模式
-            client = P115Client(refresh_token=refresh_token, app_id=app_id)
+            # 手动刷新 token（兼容 OpenList 等第三方 OAuth 应用的 refresh_token）
+            # 115 开放平台 refreshToken 接口只需要 refresh_token，不需要 app_id
+            import requests as _req
+            r = _req.post(
+                "https://qrcodeapi.115.com/open/refreshToken",
+                data={"refresh_token": refresh_token},
+                timeout=15,
+            )
+            j = r.json()
+            if not j.get("access_token"):
+                raise RuntimeError(f"115 refresh_token 刷新失败: {j}")
+            access_token = j["access_token"]
+            self.new_refresh_token = j.get("refresh_token", "")
+            client = P115Client(access_token=access_token)
         else:
+            self.new_refresh_token = ""
             client = P115Client(cookies)
         self.fs = P115FileSystem(client)
         # 缓存：cid -> {(name, size)}
