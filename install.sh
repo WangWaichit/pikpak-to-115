@@ -161,12 +161,27 @@ install_py312() {
 }
 install_py312 || {
     echo
-    echo "===== 错误 ====="
-    echo "自动安装 Python 3.12 失败。请手动安装后重跑本脚本。"
-    echo "Ubuntu 20.04 手动安装:"
-    echo "  add-apt-repository ppa:deadsnakes/ppa"
-    echo "  apt update && apt install python3.12 python3.12-venv python3.12-dev"
-    exit 1
+    echo "[*] apt 装 python3.12 失败，改用源码编译（5-10 分钟）..."
+    install -d /tmp/py312-build
+    cd /tmp/py312-build
+    $SUDO $PKG install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
+        libreadline-dev libsqlite3-dev libwrypt-dev libffi-dev \
+        libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev liblzma-dev
+    wget -q https://www.python.org/ftp/python/3.12.8/Python-3.12.8.tgz
+    tar xzf Python-3.12.8.tgz
+    cd Python-3.12.8
+    ./configure --enable-optimizations --prefix=/usr/local > /tmp/py312-configure.log 2>&1
+    make -j"$(nproc)" > /tmp/py312-make.log 2>&1
+    $SUDO make altinstall > /tmp/py312-install.log 2>&1
+    cd /
+    rm -rf /tmp/py312-build
+    if command -v python3.12 >/dev/null 2>&1; then
+        echo "  源码编译安装成功: $(python3.12 --version)"
+    else
+        echo "===== 错误 ====="
+        echo "自动安装 Python 3.12 失败。请手动安装后重跑本脚本。"
+        exit 1
+    fi
 }
 
 # ---- get-pip.py 修 distutils ----
