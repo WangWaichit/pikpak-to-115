@@ -115,13 +115,29 @@ install_py312() {
         echo "  python3.12 已存在: $(python3.12 --version)"
         return 0
     fi
+    # 系统自带 python3 >= 3.12 就不用装
+    if command -v python3 >/dev/null 2>&1; then
+        SYS_PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null)
+        SYS_PY_OK=$(python3 -c 'import sys; print(1 if sys.version_info >= (3,12) else 0)' 2>/dev/null)
+        if [ "$SYS_PY_OK" = "1" ]; then
+            echo "  系统 python3 已是 $SYS_PY_VER (>=3.12)，直接用"
+            ln -sf "$(command -v python3)" /usr/local/bin/python3.12
+            return 0
+        fi
+    fi
     echo "[*] 安装 Python 3.12 ..."
     case "$PKG" in
         apt)
-            $SUDO apt-get install -y software-properties-common
-            $SUDO add-apt-repository -y ppa:deadsnakes/ppa
-            $SUDO apt-get update -y
-            $SUDO apt-get install -y python3.12
+            $SUDO apt-get install -y software-properties-common || true
+            # PPA 可能失败（网络/版本不支持），失败就跳过，直接试装
+            $SUDO add-apt-repository -y ppa:deadsnakes/ppa || {
+                echo "  [!] add-apt-repository 失败，跳过 PPA，直接试装 python3.12"
+            }
+            $SUDO apt-get update -y || true
+            $SUDO apt-get install -y python3.12 || {
+                echo "  [!] apt 装 python3.12 失败，尝试用系统默认 python3"
+                return 1
+            }
             ;;
         dnf)
             $SUDO dnf install -y python3.12
