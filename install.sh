@@ -126,6 +126,23 @@ install_py312() {
         fi
     fi
     echo "[*] 安装 Python 3.12 ..."
+    # 最快：下载预编译的 python-build-standalone（~50MB，解压即用，不编译）
+    if [ "$(uname -m)" = "x86_64" ]; then
+        echo "  [*] 下载预编译 Python 3.12（1-2分钟）..."
+        PY312_URL="https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3+20240415-x86_64-unknown-linux-gnu-install_only.tar.gz"
+        if curl -fsSL "$PY312_URL" -o /tmp/py312.tar.gz; then
+            rm -rf /opt/python312
+            mkdir -p /opt/python312
+            tar xzf /tmp/py312.tar.gz -C /opt/python312 --strip-components=1
+            rm -f /tmp/py312.tar.gz
+            ln -sf /opt/python312/bin/python3.12 /usr/local/bin/python3.12
+            if python3.12 --version >/dev/null 2>&1; then
+                echo "  ✅ 预编译 Python 3.12 安装成功: $(python3.12 --version)"
+                return 0
+            fi
+        fi
+        echo "  [!] 预编译包下载失败，回退到 apt..."
+    fi
     case "$PKG" in
         apt)
             $SUDO apt-get install -y software-properties-common || true
