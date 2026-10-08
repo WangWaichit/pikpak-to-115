@@ -126,19 +126,26 @@ install_py312() {
         fi
     fi
     echo "[*] 安装 Python 3.12 ..."
-    # 最快：下载预编译的 python-build-standalone（~50MB，解压即用，不编译）
+    # 最快：下载预编译的 python-build-standalone（~65MB，1分钟解压即用，不编译）
     if [ "$(uname -m)" = "x86_64" ]; then
-        echo "  [*] 下载预编译 Python 3.12（1-2分钟）..."
+        echo "  [*] 下载预编译 Python 3.12（~65MB，1分钟）..."
         PY312_URL="https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3+20240415-x86_64-unknown-linux-gnu-install_only.tar.gz"
-        if curl -fsSL "$PY312_URL" -o /tmp/py312.tar.gz; then
-            rm -rf /opt/python312
-            mkdir -p /opt/python312
-            tar xzf /tmp/py312.tar.gz -C /opt/python312 --strip-components=1
-            rm -f /tmp/py312.tar.gz
-            ln -sf /opt/python312/bin/python3.12 /usr/local/bin/python3.12
-            if python3.12 --version >/dev/null 2>&1; then
-                echo "  ✅ 预编译 Python 3.12 安装成功: $(python3.12 --version)"
-                return 0
+        if wget -q --show-progress "$PY312_URL" -O /tmp/py312.tar.gz; then
+            # 验证文件大小（>10MB 才是真包）
+            SZ=$(stat -c%s /tmp/py312.tar.gz 2>/dev/null || echo 0)
+            if [ "$SZ" -gt 10000000 ]; then
+                rm -rf /opt/python312
+                mkdir -p /opt/python312
+                tar xzf /tmp/py312.tar.gz -C /opt/python312 --strip-components=1
+                rm -f /tmp/py312.tar.gz
+                ln -sf /opt/python312/bin/python3.12 /usr/local/bin/python3.12
+                if python3.12 --version >/dev/null 2>&1; then
+                    echo "  ✅ 预编译 Python 3.12 安装成功: $(python3.12 --version)"
+                    return 0
+                fi
+            else
+                echo "  [!] 下载文件太小（$SZ bytes），不是真包"
+                rm -f /tmp/py312.tar.gz
             fi
         fi
         echo "  [!] 预编译包下载失败，回退到 apt..."
