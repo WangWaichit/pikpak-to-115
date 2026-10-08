@@ -165,7 +165,7 @@ install_py312 || {
     install -d /tmp/py312-build
     cd /tmp/py312-build
     $SUDO $PKG install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
-        libreadline-dev libsqlite3-dev libwrypt-dev libffi-dev \
+        libreadline-dev libsqlite3-dev libffi-dev \
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev liblzma-dev
     wget -q https://www.python.org/ftp/python/3.12.8/Python-3.12.8.tgz
     tar xzf Python-3.12.8.tgz
