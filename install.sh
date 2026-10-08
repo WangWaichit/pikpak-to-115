@@ -129,13 +129,21 @@ install_py312() {
     case "$PKG" in
         apt)
             $SUDO apt-get install -y software-properties-common || true
-            # PPA 可能失败（网络/版本不支持），失败就跳过，直接试装
-            $SUDO add-apt-repository -y ppa:deadsnakes/ppa || {
-                echo "  [!] add-apt-repository 失败，跳过 PPA，直接试装 python3.12"
-            }
+            # 先试 add-apt-repository，失败就手动加 PPA 源
+            if ! $SUDO add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null; then
+                echo "  [!] add-apt-repository 失败，手动加 deadsnakes 源..."
+                CODENAME=$(. /etc/os-release && echo "$UBUNTU_CODENAME")
+                [ -z "$CODENAME" ] && CODENAME=focal
+                $SUDO mkdir -p /etc/apt/sources.list.d
+                echo "deb https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $CODENAME main" \
+                    | $SUDO tee /etc/apt/sources.list.d/deadsnakes.list > /dev/null
+                $SUDO apt-key adv --keyserver keyserver.ubuntu.com \
+                    --recv-keys F23C5A6CF475977595C89F51BA6932366A755776 2>/dev/null \
+                    || $SUDO apt-get install -y gnupg || true
+            fi
             $SUDO apt-get update -y || true
-            $SUDO apt-get install -y python3.12 || {
-                echo "  [!] apt 装 python3.12 失败，尝试用系统默认 python3"
+            $SUDO apt-get install -y python3.12 python3.12-venv python3.12-dev || {
+                echo "  [!] apt 装 python3.12 失败"
                 return 1
             }
             ;;
@@ -148,7 +156,15 @@ install_py312() {
     esac
     hash -r
 }
-install_py312
+install_py312 || {
+    echo
+    echo "===== 错误 ====="
+    echo "自动安装 Python 3.12 失败。请手动安装后重跑本脚本。"
+    echo "Ubuntu 20.04 手动安装:"
+    echo "  add-apt-repository ppa:deadsnakes/ppa"
+    echo "  apt update && apt install python3.12 python3.12-venv python3.12-dev"
+    exit 1
+}
 
 # ---- get-pip.py 修 distutils ----
 if ! python3.12 -m pip --version >/dev/null 2>&1; then
