@@ -37,6 +37,27 @@ wget -O- https://raw.githubusercontent.com/WangWaichit/pikpak-to-115/main/instal
 wget -O- https://cdn.jsdelivr.net/gh/WangWaichit/pikpak-to-115@main/install.sh | bash
 ```
 
+### 如果以上都连不上（国内 VPS 常见）
+
+**方案 1：git clone 绕开 wget**
+```bash
+apt update && apt install git -y   # Debian/Ubuntu
+# dnf install git -y              # CentOS/Rocky/Fedora
+git clone https://github.com/WangWaichit/pikpak-to-115.git
+cd pikpak-to-115 && chmod +x install.sh && ./install.sh
+```
+
+**方案 2：手动创建脚本**
+1. 浏览器打开 `https://github.com/WangWaichit/pikpak-to-115/blob/main/install.sh`
+2. 复制全部代码
+3. VPS 上执行 `nano install.sh`，粘贴，`Ctrl+O` 保存，`Ctrl+X` 退出
+4. `chmod +x install.sh && ./install.sh`
+
+**方案 3：用 GitHub 代理**
+```bash
+wget -O- https://ghproxy.com/https://raw.githubusercontent.com/WangWaichit/pikpak-to-115/main/install.sh | bash
+```
+
 脚本自动做 / What it does:
 1. 等包管理器锁释放（最多 5 分钟）
 2. 屏蔽所有交互弹窗
