@@ -639,6 +639,13 @@ class Pan115:
         log.info("  115 创建目录: /%s (cid=%d)", name, attr["id"])
         return int(attr["id"])
 
+    def _find_child_dir(self, parent_cid: int, name: str) -> int:
+        """只查找不创建。找不到返回 -1。"""
+        for child in self.fs.iterdir(parent_cid):
+            if child.get("is_dir") and child.get("name") == name:
+                return int(child["id"])
+        return -1
+
     def list_existing(self, cid: int) -> dict:
         """列出某 cid 下已存在文件的 {name: (size, fid)} 字典。"""
         if cid in self._dir_cache:

@@ -333,7 +333,12 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
     cur = start_path.strip("/")
     if cur:
         for seg in cur.split("/"):
-            cid = pan._ensure_child_dir(cid, seg)
+            found = pan._find_child_dir(cid, seg)
+            if found < 0:
+                cid = 0
+                cur = ""
+                break
+            cid = found
     while True:
         items = list(pan.fs.iterdir(cid))
         dirs = [x for x in items if x.get("is_dir")]
@@ -353,7 +358,12 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
                 cid = 0
                 if cur:
                     for seg in cur.split("/"):
-                        cid = pan._ensure_child_dir(cid, seg)
+                        found = pan._find_child_dir(cid, seg)
+                        if found < 0:
+                            cid = 0
+                            cur = ""
+                            break
+                        cid = found
             continue
         if choice == "." or choice == "":
             return "/" + cur
