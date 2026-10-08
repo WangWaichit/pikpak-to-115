@@ -313,8 +313,8 @@ def browse_pikpak(pk: PikPak, start_path: str = "") -> str:
                 sz = human_size(int(item.get("size", 0)))
                 print(f"  [{i}] 📄 {item['name']} ({sz})")
         n = len(all_items)
-        print(f"  [{n+1}] ↩ 返回上一级")
-        print(f"  [{n+2}] ✅ 选中当前目录")
+        print(f"  [{n+1}] ✅ 选中当前目录")
+        print(f"  [{n+2}] ↩ 返回上一级")
         print(f"  [0]  返回主菜单")
         choice = input("请选择: ").strip()
         if choice == "0":
@@ -322,12 +322,12 @@ def browse_pikpak(pk: PikPak, start_path: str = "") -> str:
         if choice.isdigit():
             v = int(choice)
             if v == n + 1:
+                return "/" + cur
+            if v == n + 2:
                 if cur:
                     cur = "/".join(cur.split("/")[:-1])
                     cid = pk.resolve_path(cur)
                 continue
-            if v == n + 2:
-                return "/" + cur
             if 1 <= v <= n:
                 picked = all_items[v - 1]
                 if picked in folders:
@@ -361,8 +361,8 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
                 sz = human_size(item.get("size", 0))
                 print(f"  [{i}] 📄 {item['name']} ({sz})")
         n = len(all_items)
-        print(f"  [{n+1}] ↩ 返回上一级")
-        print(f"  [{n+2}] ✅ 选中当前目录")
+        print(f"  [{n+1}] ✅ 选中当前目录")
+        print(f"  [{n+2}] ↩ 返回上一级")
         print(f"  [0]  返回主菜单")
         choice = input("请选择: ").strip()
         if choice == "0":
@@ -370,6 +370,8 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
         if choice.isdigit():
             v = int(choice)
             if v == n + 1:
+                return "/" + cur
+            if v == n + 2:
                 if cur:
                     cur = "/".join(cur.split("/")[:-1])
                     cid = "0"
@@ -382,8 +384,6 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
                                 break
                             cid = found
                 continue
-            if v == n + 2:
-                return "/" + cur
             if 1 <= v <= n:
                 picked = all_items[v - 1]
                 if picked["is_dir"]:
