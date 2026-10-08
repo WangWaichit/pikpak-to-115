@@ -304,38 +304,47 @@ def browse_pikpak(pk: PikPak, start_path: str = "") -> str:
         files = [c for c in children
                  if c.get("kind") == "drive#file"
                  and c.get("phase") == "PHASE_TYPE_COMPLETE"]
+        all_items = folders + files
         print(f"\n--- PikPak: /{cur or ''}  ({len(folders)} 目录, {len(files)} 文件) ---")
-        for i, f in enumerate(folders, 1):
-            print(f"  [{i}] 📁 {f['name']}/")
-        print(f"  [..] 返回上一级目录")
-        print(f"  [.] 👉 选中当前目录作为源")
-        print(f"  [0] 返回主菜单")
+        for i, item in enumerate(all_items, 1):
+            if item in folders:
+                print(f"  [{i}] 📁 {item['name']}/")
+            else:
+                sz = human_size(int(item.get("size", 0)))
+                print(f"  [{i}] 📄 {item['name']} ({sz})")
+        n = len(all_items)
+        print(f"  [{n+1}] ↩ 返回上一级")
+        print(f"  [{n+2}] ✅ 选中当前目录")
+        print(f"  [0]  返回主菜单")
         choice = input("请选择: ").strip()
         if choice == "0":
             return ""
-        if choice == "..":
-            if cur:
-                cur = "/".join(cur.split("/")[:-1])
-                cid = pk.resolve_path(cur)
-            continue
-        if choice == "." or choice == "":
-            return "/" + cur
-        if choice.isdigit() and 1 <= int(choice) <= len(folders):
-            picked = folders[int(choice) - 1]
-            cur = f"{cur}/{picked['name']}".strip("/")
-            cid = picked["id"]
-            continue
+        if choice.isdigit():
+            v = int(choice)
+            if v == n + 1:
+                if cur:
+                    cur = "/".join(cur.split("/")[:-1])
+                    cid = pk.resolve_path(cur)
+                continue
+            if v == n + 2:
+                return "/" + cur
+            if 1 <= v <= n:
+                picked = all_items[v - 1]
+                if picked in folders:
+                    cur = f"{cur}/{picked['name']}".strip("/")
+                    cid = picked["id"]
+                continue
         print("  ? 无效输入")
 
 
 def browse_pan115(pan: Pan115, start_path: str = "") -> str:
-    cid = 0
+    cid = "0"
     cur = start_path.strip("/")
     if cur:
         for seg in cur.split("/"):
             found = pan._find_child_dir(cid, seg)
             if not found:
-                cid = 0
+                cid = "0"
                 cur = ""
                 break
             cid = found
@@ -343,35 +352,44 @@ def browse_pan115(pan: Pan115, start_path: str = "") -> str:
         items = list(pan.iterdir(cid))
         dirs = [x for x in items if x.get("is_dir")]
         files = [x for x in items if not x.get("is_dir")]
+        all_items = dirs + files
         print(f"\n--- 115: /{cur or ''}  ({len(dirs)} 目录, {len(files)} 文件) ---")
-        for i, d in enumerate(dirs, 1):
-            print(f"  [{i}] 📁 {d['name']}/")
-        print(f"  [..] 返回上一级目录")
-        print(f"  [.] 👉 选中当前目录")
-        print(f"  [0] 返回主菜单")
+        for i, item in enumerate(all_items, 1):
+            if item["is_dir"]:
+                print(f"  [{i}] 📁 {item['name']}/")
+            else:
+                sz = human_size(item.get("size", 0))
+                print(f"  [{i}] 📄 {item['name']} ({sz})")
+        n = len(all_items)
+        print(f"  [{n+1}] ↩ 返回上一级")
+        print(f"  [{n+2}] ✅ 选中当前目录")
+        print(f"  [0]  返回主菜单")
         choice = input("请选择: ").strip()
         if choice == "0":
             return ""
-        if choice == "..":
-            if cur:
-                cur = "/".join(cur.split("/")[:-1])
-                cid = 0
+        if choice.isdigit():
+            v = int(choice)
+            if v == n + 1:
                 if cur:
-                    for seg in cur.split("/"):
-                        found = pan._find_child_dir(cid, seg)
-                        if not found:
-                            cid = 0
-                            cur = ""
-                            break
-                        cid = found
-            continue
-        if choice == "." or choice == "":
-            return "/" + cur
-        if choice.isdigit() and 1 <= int(choice) <= len(dirs):
-            picked = dirs[int(choice) - 1]
-            cur = f"{cur}/{picked['name']}".strip("/")
-            cid = int(picked["id"])
-            continue
+                    cur = "/".join(cur.split("/")[:-1])
+                    cid = "0"
+                    if cur:
+                        for seg in cur.split("/"):
+                            found = pan._find_child_dir(cid, seg)
+                            if not found:
+                                cid = "0"
+                                cur = ""
+                                break
+                            cid = found
+                continue
+            if v == n + 2:
+                return "/" + cur
+            if 1 <= v <= n:
+                picked = all_items[v - 1]
+                if picked["is_dir"]:
+                    cur = f"{cur}/{picked['name']}".strip("/")
+                    cid = picked["id"]
+                continue
         print("  ? 无效输入")
 
 
